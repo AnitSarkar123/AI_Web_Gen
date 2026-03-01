@@ -42,30 +42,27 @@ export const AIChatBox = (projectId: props) => {
     const onSubmit = async ({ message }: z.infer<typeof messageSchema>) => {
         const cleanMessage = message.trim() ?? "";
         try {
-            if (!cleanMessage && attachedFiles) {
-                toast.error("Please enter a message before submitting an attachment.")
-                return;
-            }
-            const files = [attachedFiles as File]
-            const res = await startUpload(files)
-            console.log(res)
-            const url = res?.[0]?.ufsUrl;
-            console.log(url)
-            if (projectId) {
-                // TODO: Replace with actual API call to save message
-                const res = await apiClient.projects.post()
-                console.log("Message sent with attachment:", url, cleanMessage)
-                if (res) {
-                    // router.push(`/projects/${res.data.id}`)
-                    return;
-                }
+            //     if (!cleanMessage && attachedFiles) {
+            //         toast.error("Please enter a message before submitting an attachment.")
+            //         return;
+            //     }
+            //     const files = [attachedFiles as File]
+            //     const res = await startUpload(files)
+            //     console.log(res)
+            //     const url = res?.[0]?.ufsUrl;
+            //     console.log(url)
+            //     if (projectId) {
+            //         // TODO: Replace with actual API call to save message
+            //         const res = await apiClient.projects.post()
+            //         console.log("Message sent with attachment:", url, cleanMessage)
+            //         if (res) {
+            //             // router.push(`/projects/${res.data.id}`)
+            //             return;
+            //         }
 
-            }
-            await apiClient.messages.post({
-                message: cleanMessage,
-                attachmentUrl: url
-            });
-
+            //     }
+            //     await apiClient.messages.post();
+            await apiClient.messages.post({ message: cleanMessage });
 
 
         }
