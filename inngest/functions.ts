@@ -28,7 +28,7 @@ export const codeAgentFunction = inngest.createFunction(
       system: PROMPT,
       description: 'An expert coding agent',
       model: gemini({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash-lite',
         apiKey: process.env.GEMINI_API_KEY,
       }),
       tools: [
@@ -40,6 +40,7 @@ export const codeAgentFunction = inngest.createFunction(
           }),
           handler: async ({ command }) => {
             const buffers = { stdout: "", stderr: "" }
+
             try {
               const sandbox = await getSandbox(sandboxId);
               const results = await sandbox.commands.run(command, {
@@ -75,6 +76,7 @@ export const codeAgentFunction = inngest.createFunction(
                   const fullPath = toProjectPath(file.path);
                   await sandbox.files.write(fullPath, file.content);
                   updatedFiles[file.path] = file.content;
+
                 }
                 return updatedFiles;
               } catch (e) {
@@ -82,8 +84,9 @@ export const codeAgentFunction = inngest.createFunction(
 
               }
             })
-            if (newFiles && typeof newFiles == "object" && !Array.isArray(newFiles)) {
+            if (typeof newFiles == "object") {
               network.state.data.files = newFiles;
+              return `Successfully updated ${files.length} files.`;
             }
 
 
@@ -127,21 +130,27 @@ export const codeAgentFunction = inngest.createFunction(
       lifecycle: {
         onResponse: async ({ result, network }) => {
           const lastMessage = result.output.findLastIndex(
-            (message) => message.role === "assistant"
+            (message) => message.role === "assistant",
           );
-          const message = (result.output[lastMessage] as TextMessage) || undefined;
-          const lastTextMessage = message.content ? typeof message.content === "string"
-            ? message.content : message.content.map((c) => c.text).join("")
-            : undefined
+
+          const message =
+            (result.output[lastMessage] as TextMessage) || undefined;
+
+          const lastTextMessage = message.content
+            ? typeof message.content === "string"
+              ? message.content
+              : message.content.map((c) => c.text).join("")
+            : undefined;
+
           if (lastTextMessage && network) {
-            if (lastTextMessage.includes('<task_summary>')) {
+            if (lastTextMessage.includes("<task_summary>")) {
               network.state.data.summary = lastTextMessage;
             }
           }
+
           return result;
         },
       },
-
     });
     const network = createNetwork<codeAgentState>({
       name: "codeing-agent-network",
@@ -161,7 +170,7 @@ export const codeAgentFunction = inngest.createFunction(
 
 
     });
-    const result = await network.run(event.data.message);
+    const result = await network.run(event.data.messages)
 
     const sandboxurl = await step.run("get sandbox url", async () => {
       const sandbox = await getSandbox(sandboxId);
