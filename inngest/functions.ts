@@ -1,14 +1,15 @@
 import Sandbox from "e2b";
 import { inngest } from "./client";
-import { createAgent, createTool, gemini, TextMessage, createNetwork, Tool, createState } from "@inngest/agent-kit";
+import { createAgent, createTool, gemini, TextMessage, createNetwork, Tool, createState, openai } from "@inngest/agent-kit";
 import { getSandbox, toProjectPath } from "@/lib/sandbox";
 import { create } from "domain";
 import z from "zod";
 import { PROMPT } from "./prompt";
-import { messages } from '../app/elysia/messages';
+import { message } from '../app/elysia/messages';
 import { Message } from '../lib/generated/prisma/models/Message';
 import { ContextMenu as ContextMenuPrimitive } from 'radix-ui';
 import { Code } from "lucide-react";
+import { db } from "@/lib/db";
 interface codeAgentState {
   summary?: string;
   files?: Record<string, string>;
@@ -28,7 +29,7 @@ export const codeAgentFunction = inngest.createFunction(
       system: PROMPT,
       description: 'An expert coding agent',
       model: gemini({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash',
         apiKey: process.env.GEMINI_API_KEY,
       }),
       tools: [
@@ -155,7 +156,7 @@ export const codeAgentFunction = inngest.createFunction(
     const network = createNetwork<codeAgentState>({
       name: "codeing-agent-network",
       agents: [codeAgent],
-      maxIter: 20,
+      maxIter: 5,
       defaultState: createState<codeAgentState>({
         summary: "",
         files: {},
@@ -170,13 +171,48 @@ export const codeAgentFunction = inngest.createFunction(
 
 
     });
-    const result = await network.run(event.data.messages)
+    const result = await network.run(event.data.message)
 
     const sandboxurl = await step.run("get sandbox url", async () => {
       const sandbox = await getSandbox(sandboxId);
       const host = sandbox.getHost(3000)
       return `https://${host}`;
     });
+    await step.run("save-to db", async () => {
+      const filesMap = result.state.data.files || {};
+      const hasError = Object.keys(result.state.data.files || {}).length === 0;
+      if (hasError) {
+        return await db.message.create({
+          data: {
+            content: "Something went wrong. Try again later.",
+            role: "ASSISTANT",
+            type: "ERROR",
+            projectId: event.data.projectId,
+          }
+        })
+      }
+      const combinedCode = Object.entries(filesMap)
+        .map(([path, content]) => `// --- ${path} ---\n${content}`)
+        .join("\n\n");
+      return await db.message.create({
+        data: {
+          content: result.state.data.summary || "Code fragment created successfully.",
+          role: "ASSISTANT",
+          type: "RESULT",
+          projectId: event.data.projectId,
+          codeFragment: {
+            create: {
+              sandboxUrl: sandboxurl,   // <-- capital U to match schema
+              sandboxId: sandboxId,
+              title: "Code Fragment",
+              files: filesMap,
+              language: "typescript",
+              code: combinedCode,
+            }
+          }
+        }
+      })
+    })
     return {
       sandboxurl,
       title: "Code Fragment",

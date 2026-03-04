@@ -20,12 +20,12 @@ import { apiClient } from '@/lib/api-client';
 import { useRouter } from "next/navigation"
 
 interface props {
-    projectId: string
+    projectId?: string
 }
 const messageSchema = z.object({
     message: z.string().min(1, 'Message is required').max(1000, 'Message is too long')
 })
-export const AIChatBox = (projectId: props) => {
+export const AIChatBox = ({ projectId }: props) => {
     const router = useRouter();
     const form = useForm<z.infer<typeof messageSchema>>({
         resolver: zodResolver(messageSchema),
@@ -62,8 +62,19 @@ export const AIChatBox = (projectId: props) => {
 
             //     }
             //     await apiClient.messages.post();
-            await apiClient.messages.post({ message: cleanMessage });
+            // await apiClient.messages.post({ message: cleanMessage });
+            if (!projectId) {
+                const res = await apiClient.projects.post({ messages: message })
+                if (res.data?.id) {
+                    router.push(`/projects/${res.data.id}`)
+                    return;
+                }
 
+
+            }
+            if (projectId) {
+                await apiClient.messages.post({ message: cleanMessage, projectId });
+            }
 
         }
         catch (error) {

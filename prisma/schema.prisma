@@ -27,7 +27,7 @@ model Project{
   id String @id @default(uuid())
   name String
   messages Message[]
-  sandboxId String @db.VarChar(64)
+  sandboxId String? @db.VarChar(64)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -140,6 +140,7 @@ A short, high-level summary of what was created or changed.This should never be 
 
 - Do not include any other text, markdown, or code.
 - Do not output this early—only once at the end.
+.
 `;
 
 export const DESIGN_PROMPT = `

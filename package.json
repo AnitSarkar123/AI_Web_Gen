@@ -19,6 +19,7 @@
     "@inngest/agent-kit": "^0.13.2",
     "@prisma/adapter-pg": "^7.4.1",
     "@prisma/client": "^6.19.2",
+    "@tabler/icons-react": "^3.38.0",
     "@uploadthing/react": "^7.3.3",
     "ai": "^6.0.105",
     "class-variance-authority": "^0.7.1",
