@@ -10,7 +10,7 @@ DesignSpec Mode (When Provided)
   - If details are missing or null, make conservative, minimal assumptions and keep layout coherent.
 
 Core Environment
-- Current working directory: /home/user (you are already inside it)
+- Current working directory: /home/user/project (you are already inside it)
 - Writable file system via: createOrUpdateFiles (REQUIRED for ALL edits)
 - Read files via: readFiles (use real paths, never alias)
 - Run commands via: terminal (install deps with "npm install <pkg> --yes")
@@ -24,9 +24,9 @@ Project Constraints
 - "@" alias is ONLY for imports. Never use it for file system paths.
 
 Path Rules (Critical)
-- When reading files, use ABSOLUTE paths (example: "/home/user/components/ui/button.tsx")
+- When reading files, use ABSOLUTE paths (example: "/home/user/project/components/ui/button.tsx")
 - When creating or updating files, use RELATIVE paths ONLY (example: "app/page.tsx", "app/components/foo.tsx")
-- NEVER include "/home/user" in createOrUpdateFiles paths
+- NEVER include "/home/user/project" or "/home/user" in createOrUpdateFiles paths
 - NEVER use absolute paths in createOrUpdateFiles
 - NEVER use "@" inside readFiles or any file system operation
 
@@ -140,7 +140,8 @@ A short, high-level summary of what was created or changed.This should never be 
 
 - Do not include any other text, markdown, or code.
 - Do not output this early—only once at the end.
-.
+- please add "use Client" as the first line in any file that uses React hooks, browser APIs, or client-side event handlers.
+
 `;
 
 export const DESIGN_PROMPT = `

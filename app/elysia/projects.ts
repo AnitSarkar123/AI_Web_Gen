@@ -1,32 +1,45 @@
 import Elysia from "elysia";
-import { create } from 'domain';
 import { db } from "@/lib/db";
-import { message } from './messages';
 import { z } from "zod";
 import { inngest } from "@/inngest/client";
 export const projects = new Elysia({ prefix: '/projects' })
-    .post('/', async ({ body }) => {
-        const createProject = await db.project.create({
-            data: {
-                name: `Project-${Date.now()}`,
-                messages: {
-                    create: {
-                        content: body.messages,
-                        role: "USER",
-                        type: "RESULT",
+    .post('/', async ({ body, set }) => {
+        try {
+            const createProject = await db.project.create({
+                data: {
+                    name: `Project-${Date.now()}`,
+                    message: {
+                        create: {
+                            content: body.messages,
+                            role: "USER",
+                            type: "RESULT",
 
+                        }
                     }
                 }
+            })
+
+            try {
+                await inngest.send({
+                    name: "code-agent/codeAgent.run",
+                    data: {
+                        message: body.messages,
+                        projectId: createProject.id,
+                    }
+                })
+            } catch (queueError) {
+                console.error("Failed to enqueue code generation:", queueError)
             }
-        })
-        await inngest.send({
-            name: "code-agent/codeAgent.run",
-            data: {
-                message: body.messages,
-                projectId: createProject.id,
+
+            return createProject;
+        } catch (error) {
+            console.error("Failed to create project:", error)
+            set.status = 500;
+            return {
+                success: false,
+                error: "Failed to create project",
             }
-        })
-        return createProject;
+        }
 
     },
         {

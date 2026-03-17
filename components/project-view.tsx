@@ -1,71 +1,93 @@
-"use client"
-import { useState } from "react";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./ui/resizable";
-// import { Direction } from 'radix-ui';
-import { CodeFragment,Message } from "@/lib/generated/prisma/client";
-import { IconWorld, IconCode } from "@tabler/icons-react";
-// import { Tabs } from "@base-ui/react";
-import { Table } from "./ui/table";
-import { Tabs,TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
+"use client";
+
+import { CodeFragment, Message } from "@/lib/generated/prisma/client";
+import {
+    ResizableHandle,
+    ResizablePanel,
+    ResizablePanelGroup,
+} from "./ui/resizable";
+import { useMemo, useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { IconCode, IconWorld } from "@tabler/icons-react";
 import MessagesContainer from "./messages-container";
-// import { cacheLife } from '../.next/dev/types/cache-life';
-// import { TabsList } from "@base-ui/react";
-interface props {
+// import FileExplorer from "./file-explorer";
+import FileExplorer from "./file-explorer";
+import { CodeWebView } from "./code-web-view";
+
+interface Props {
     projectId: string;
-    intialMessages: (Message &{codeFragment:CodeFragment | null })[] | null;
+    initialMessages: (Message & { codeFragment: CodeFragment | null })[] | null;
 }
-export function ProjectView({ projectId, intialMessages }: props) {
-    const [activeCodeFragment, setActiveCodeFragment] = useState<CodeFragment | null>(null);
-    const [tabState,setTabstate]=useState<"preview" | "code">("preview")
+
+export function ProjectView({ projectId, initialMessages }: Props) {
+    const [activeCodeFragment, setActiveCodeFragment] =
+        useState<CodeFragment | null>(() => {
+            return (
+                initialMessages?.find((message) => message.codeFragment)?.codeFragment ?? null
+            );
+        });
+    const [tabState, setTabState] = useState<"preview" | "code">("preview");
+
+    const activeFiles = useMemo(() => {
+        const rawFiles = activeCodeFragment?.files;
+        if (!rawFiles || typeof rawFiles !== "object" || Array.isArray(rawFiles)) {
+            return {} as Record<string, string>;
+        }
+
+        return Object.fromEntries(
+            Object.entries(rawFiles as Record<string, unknown>).filter(
+                ([, value]) => typeof value === "string"
+            )
+        ) as Record<string, string>;
+    }, [activeCodeFragment]);
 
     return (
-        <ResizablePanelGroup className="h-dvh w-dvh overflow-hidden" direction="horizontal">
-           < ResizablePanel defaultSize={20} minSize={20} className="border-r">
-            <MessagesContainer
-            projectId={projectId}
-            intialMessages={intialMessages}
-            activeCodeFragment={activeCodeFragment}
-            setActiveCodeFragment={setActiveCodeFragment}
-
-            />
-
-           </ResizablePanel>
-           <ResizableHandle withHandle/>
-
+        <ResizablePanelGroup
+            className="h-dvh w-dvw overflow-hidden"
+            direction="horizontal"
+            id="project-view-layout"
+        >
+            <ResizablePanel defaultSize={20} minSize={20}>
+                <MessagesContainer
+                    projectId={projectId}
+                    intialMessages={initialMessages}
+                    activeCodeFragment={activeCodeFragment}
+                    setActiveCodeFragment={setActiveCodeFragment}
+                />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
             <ResizablePanel defaultSize={80} minSize={50}>
-                <Tabs className="h-full"
-                 defaultValue="preview"
-                 value={tabState}
-                 onValueChange={(value)=>setTabstate(value as "preview" | "code")}
-                 >
+                <Tabs
+                    id="projects-tab"
+                    className="h-full"
+                    defaultValue="preview"
+                    value={tabState}
+                    onValueChange={(value) => setTabState(value as "preview" | "code")}
+                >
                     <div className="w-full flex items-center p-2 border-b gap-x-2">
                         <TabsList className="h-8 p-0 border min-w-48">
                             <TabsTrigger value="preview">
-                                <IconWorld/>
-                                
+                                <IconWorld />
                             </TabsTrigger>
                             <TabsTrigger value="code">
-                                <IconCode/>
-                                
+                                <IconCode />
                             </TabsTrigger>
-
                         </TabsList>
-
                     </div>
-                    <TabsContent value="preview" >
-                        Project Preview
 
+                    <TabsContent value="preview">
+                        {!!activeCodeFragment && <CodeWebView data={activeCodeFragment} />}
                     </TabsContent>
-                    <TabsContent value="code" >
-                        Project code
-
+                    <TabsContent value="code">
+                        <FileExplorer
+                            files={activeFiles}
+                            fragmentId={activeCodeFragment?.id ?? ""}
+                            projectId={projectId}
+                            sandboxId={activeCodeFragment?.sandboxId ?? ""}
+                        />
                     </TabsContent>
-
-
                 </Tabs>
             </ResizablePanel>
-
-
         </ResizablePanelGroup>
-    )
+    );
 }

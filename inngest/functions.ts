@@ -1,14 +1,9 @@
-import Sandbox from "e2b";
+import { Sandbox } from "@e2b/code-interpreter";
 import { inngest } from "./client";
-import { createAgent, createTool, gemini, TextMessage, createNetwork, Tool, createState, openai } from "@inngest/agent-kit";
+import { createAgent, createTool, TextMessage, createNetwork, Tool, createState, openai } from "@inngest/agent-kit";
 import { getSandbox, toProjectPath } from "@/lib/sandbox";
-import { create } from "domain";
 import z from "zod";
 import { PROMPT } from "./prompt";
-import { message } from '../app/elysia/messages';
-import { Message } from '../lib/generated/prisma/models/Message';
-import { ContextMenu as ContextMenuPrimitive } from 'radix-ui';
-import { Code } from "lucide-react";
 import { db } from "@/lib/db";
 interface codeAgentState {
   summary?: string;
@@ -20,17 +15,18 @@ export const codeAgentFunction = inngest.createFunction(
   async ({ event, step }) => {
     const sandboxId = await step.run("get-or-Create Sandbox", async () => {
 
-      const { sandboxId } = await Sandbox.create("forgeai-v1");
-      return sandboxId;
+      const sandbox = await Sandbox.create("forgeai-v1", { timeoutMs: 15 * 60 * 1000 });
+      return sandbox.sandboxId;
     });
 
     const codeAgent = createAgent({
       name: 'coding agent',
       system: PROMPT,
       description: 'An expert coding agent',
-      model: gemini({
-        model: 'gemini-2.5-flash',
-        apiKey: process.env.GEMINI_API_KEY,
+      model: openai({
+        model: 'meta/llama-3.3-70b-instruct',
+        apiKey: process.env.NVIDIA_API_KEY,
+        baseUrl: process.env.NVIDIA_API_URL
       }),
       tools: [
         createTool({
@@ -61,6 +57,30 @@ export const codeAgentFunction = inngest.createFunction(
 
             }
           }
+        }),
+        createTool({
+          name: "listFiles",
+          description: "List files in a directory inside the sandbox",
+          parameters: z.object({
+            path: z.string().default(".").describe("Directory path to list"),
+            recursive: z.boolean().default(true),
+            maxDepth: z.number().int().min(1).max(10).default(4),
+          }),
+          handler: async ({ path, recursive, maxDepth }) => {
+            try {
+              const sandbox = await getSandbox(sandboxId);
+              const target = toProjectPath(path);
+
+              const cmd = recursive
+                ? `find "${target}" -maxdepth ${maxDepth} -type f`
+                : `find "${target}" -maxdepth 1 -type f`;
+
+              const res = await sandbox.commands.run(cmd);
+              return res.stdout || "";
+            } catch (e) {
+              return `Error listing files: ${e}`;
+            }
+          },
         }),
         createTool({
           name: 'createOrUpdateFiles',
@@ -130,14 +150,19 @@ export const codeAgentFunction = inngest.createFunction(
       ],
       lifecycle: {
         onResponse: async ({ result, network }) => {
-          const lastMessage = result.output.findLastIndex(
-            (message) => message.role === "assistant",
-          );
+          // const lastMessage = result.output.findLastIndex(
+          //   (message) => message.role === "assistant",
+          // );
 
-          const message =
-            (result.output[lastMessage] as TextMessage) || undefined;
+          // const message =
+          //   (result.output[lastMessage] as TextMessage) || undefined;
+          const output = Array.isArray(result.output) ? result.output : [];
 
-          const lastTextMessage = message.content
+          const message = [...output]
+            .reverse()
+            .find((m) => m?.role === "assistant") as TextMessage | undefined;
+
+          const lastTextMessage = message?.content
             ? typeof message.content === "string"
               ? message.content
               : message.content.map((c) => c.text).join("")
@@ -162,7 +187,10 @@ export const codeAgentFunction = inngest.createFunction(
         files: {},
       }),
       router: async ({ network }) => {
-        if (network.state.data.summary) {
+        const hasSummary = Boolean(network.state.data.summary);
+        const hasFiles = Object.keys(network.state.data.files || {}).length > 0;
+        // Only stop when BOTH summary AND files exist
+        if (hasSummary && hasFiles) {
           return;
         }
         return codeAgent;
@@ -171,7 +199,67 @@ export const codeAgentFunction = inngest.createFunction(
 
 
     });
-    const result = await network.run(event.data.message)
+    const inputMessage = event.data?.message ?? event.data?.value;
+    if (!inputMessage || typeof inputMessage !== "string") {
+      await step.run("save-invalid-input-error", async () => {
+        return await db.message.create({
+          data: {
+            content: "Missing input message for code generation.",
+            role: "ASSISTANT",
+            type: "ERROR",
+            projectId: event.data.projectId,
+          }
+        })
+      });
+
+      return {
+        sandboxurl: "",
+        title: "Code Fragment",
+        files: {},
+        summary: "",
+      };
+    }
+
+    let result = await network.run(inputMessage)
+
+    // If AI responded but wrote zero files, retry once with explicit instruction
+    if (Object.keys(result.state.data.files || {}).length === 0) {
+      result = await network.run(
+        `${inputMessage}\n\nIMPORTANT: You MUST call createOrUpdateFiles with the complete file contents NOW before writing <task_summary>. Do not skip this step.`
+      );
+    }
+
+    await step.run("ensure-dev-server", async () => {
+      const sandbox = await getSandbox(sandboxId);
+
+      // Check whether something is already listening on :3000
+      const check = await sandbox.commands.run(
+        `sh -lc 'if command -v ss >/dev/null 2>&1; then ss -ltn | grep -q ":3000"; else netstat -ltn 2>/dev/null | grep -q ":3000"; fi && echo RUNNING || echo STOPPED'`
+      );
+
+      if (!check.stdout.includes("RUNNING")) {
+        // Start Next.js in background from project root
+        await sandbox.commands.run(
+          `sh -lc 'cd /home/user/project && nohup npx next --turbo -p 3000 > /tmp/next-dev.log 2>&1 &'`
+        );
+      }
+
+      // Wait for server to be ready (up to ~30s)
+      for (let i = 0; i < 15; i++) {
+        const probe = await sandbox.commands.run(
+          `sh -lc 'if command -v curl >/dev/null 2>&1; then curl -sSf http://127.0.0.1:3000 >/dev/null; else wget -qO- http://127.0.0.1:3000 >/dev/null; fi && echo READY || echo NOT_READY'`
+        );
+
+        if (probe.stdout.includes("READY")) {
+          return "ready";
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      const logs = await sandbox.commands.run(`sh -lc 'tail -n 120 /tmp/next-dev.log 2>/dev/null || echo "No next-dev.log found"'`);
+      throw new Error(`Port 3000 did not become ready. Logs:\n${logs.stdout || logs.stderr}`);
+    });
 
     const sandboxurl = await step.run("get sandbox url", async () => {
       const sandbox = await getSandbox(sandboxId);

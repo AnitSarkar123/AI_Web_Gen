@@ -32,12 +32,11 @@ export const message = new Elysia({ prefix: '/messages' })
                     type: "RESULT"
                 }
             })
-            const result = await inngest.send({
+            await inngest.send({
                 name: "code-agent/codeAgent.run",
                 data: { 
                     projectId: body.projectId,
-                    value: createdMessage.content,
-                    // messages: body.message,
+                    message: createdMessage.content,
                 },
             });
 

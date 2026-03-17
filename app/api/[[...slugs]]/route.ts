@@ -1,9 +1,10 @@
-import { Elysia, t } from 'elysia'
+import { Elysia } from 'elysia'
 
 import { message } from '@/app/elysia/messages';
 import { projects } from '@/app/elysia/projects';
+import { fragments } from '@/app/elysia/fragment';
 
-const app = new Elysia({ prefix: '/api' }).use([message, projects])
+const app = new Elysia({ prefix: '/api' }).use([message, projects, fragments])
     
 
 export const GET = app.fetch 
