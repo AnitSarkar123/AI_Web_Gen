@@ -127,7 +127,7 @@ export const AIChatBox = ({ projectId }: props) => {
     return (
         <div className="mx-auto flex flex-col w-full gap-4">
             <div className="relative z-10 flex flex-col w-full mx-auto content-center">
-                <form className="overflow-visible rounded-xl border p-2 bg-[#ffeac1] border-[#ffeac1] focus-within:border-[#ffeac1]"
+                <form className="overflow-visible rounded-xl border p-2 bg-white border-black focus-within:border-black"
                     id="message-form"
                     onSubmit={form.handleSubmit(onSubmit)}>
                     {imagePreview && attachedFiles && (

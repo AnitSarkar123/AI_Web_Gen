@@ -6,6 +6,7 @@ import z from "zod";
 import { PROMPT } from "./prompt";
 import { db } from "@/lib/db";
 import { extractDesignSpecFromImage } from "@/lib/extract-design-spec";
+import { searchUnsplashPhoto, UnsplashAttribution } from "@/lib/unsplash";
 interface codeAgentState {
   summary?: string;
   files?: Record<string, string>;
@@ -25,9 +26,9 @@ export const codeAgentFunction = inngest.createFunction(
       system: PROMPT,
       description: 'An expert coding agent',
       model: openai({
-        model: 'meta/llama-4-maverick-17b-128e-instruct',
-        apiKey: process.env.NVIDIA_API_KEY,
-        baseUrl: process.env.NVIDIA_API_URL
+        model: 'qwen/qwen3-coder:free',
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseUrl: process.env.OPENROUTER_URL
       }),
       tools: [
         createTool({
@@ -146,7 +147,99 @@ export const codeAgentFunction = inngest.createFunction(
 
           }
 
-        })
+        }),
+        createTool({
+          name: "unsplashImage",
+          description:
+            "Search Unsplash and download an image into /public/assets/unsplash. Return local public path and attributions.",
+          parameters: z.object({
+            query: z.string().min(2),
+            orientation: z
+              .enum(["landscape", "portrait", "squarish"])
+              .default("landscape"),
+            purpose: z
+              .enum([
+                "hero",
+                "feature",
+                "testimonial",
+                "background",
+                "listing",
+                "generic",
+              ])
+              .default("generic"),
+            filenameHint: z.string().default(""),
+          }),
+          handler: async ({ query, orientation, purpose, filenameHint }) => {
+            // await publish(
+            //   await projectChannel(event.data.projectId).projectInfo(
+            //     "Downloading images...",
+            //   ),
+            // );
+            const accessKey = process.env.UNSPLASH_API_KEY;
+
+            if (!accessKey) {
+              throw new Error("Missing Unsplash API Key");
+            }
+
+            const sandbox = await getSandbox(sandboxId);
+
+            const search = await searchUnsplashPhoto({
+              accessKey,
+              query,
+              orientation,
+            });
+
+            const photo = search.results[0];
+            if (!photo)
+              throw new Error(`No Unsplash result for query: ${query}`);
+
+            const imageUrl =
+              (purpose === "background"
+                ? photo.urls.full
+                : photo.urls.regular) ?? photo.urls.regular;
+
+            if (!imageUrl)
+              throw new Error("Unsplash result missing usable image URL");
+
+            const safeSlug = String(filenameHint ?? photo.id ?? query)
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/(^-|-$)/g, "")
+              .slice(0, 60);
+
+            const publicDir = "/home/user/project/public/assets/unsplash";
+            const localFile = `${publicDir}/${safeSlug}.jpg`;
+            const publicPath = `/assets/unsplash/${safeSlug}.jpg`;
+
+            await sandbox.commands.run(`mkdir -p "${publicDir}"`);
+
+            const cmd = `curl -L --fail --silent --show-error "${imageUrl}" -o "${localFile}"`;
+            const result = await sandbox.commands.run(cmd);
+
+            if (result.exitCode !== 0) {
+              const msg = (result.stderr || result.stdout || "").slice(0, 800);
+              throw new Error(`Failed to download Unsplash image: ${msg}`);
+            }
+
+            const photographerName = photo.user.name ?? null;
+            const photographerUsername = photo.user.username ?? null;
+            const photoUrl = photo.links.html ?? null;
+
+            const attributionUrl =
+              photoUrl !== null
+                ? `${photoUrl}?utm_source=forgeai&utm_medium=referral`
+                : null;
+
+            const attribution: UnsplashAttribution = {
+              photographerName,
+              photographerUsername,
+              photoUrl,
+              attributionUrl,
+            };
+
+            return { publicPath, localFile, attribution };
+          },
+        }),
 
       ],
       lifecycle: {
