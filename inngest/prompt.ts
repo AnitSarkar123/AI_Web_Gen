@@ -140,7 +140,7 @@ A short, high-level summary of what was created or changed.This should never be 
 
 - Do not include any other text, markdown, or code.
 - Do not output this early—only once at the end.
-- please add "use Client" as the first line in any file that uses React hooks, browser APIs, or client-side event handlers.
+
 
 `;
 

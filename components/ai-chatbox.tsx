@@ -18,6 +18,7 @@ import { projects } from '../app/elysia/projects';
 // TODO: Import or define apiClient - replace with your actual API client
 import { apiClient } from '@/lib/api-client';
 import { useRouter } from "next/navigation"
+import { DEFAULT_PROMPTS } from "@/constants"
 
 interface props {
     projectId?: string
@@ -42,15 +43,15 @@ export const AIChatBox = ({ projectId }: props) => {
     const onSubmit = async ({ message }: z.infer<typeof messageSchema>) => {
         const cleanMessage = message.trim() ?? "";
         try {
-            //     if (!cleanMessage && attachedFiles) {
-            //         toast.error("Please enter a message before submitting an attachment.")
-            //         return;
-            //     }
-            //     const files = [attachedFiles as File]
-            //     const res = await startUpload(files)
-            //     console.log(res)
-            //     const url = res?.[0]?.ufsUrl;
-            //     console.log(url)
+            if (!cleanMessage && attachedFiles) {
+                toast.error("Please enter a message before submitting an attachment.")
+                return;
+            }
+            const files = [attachedFiles as File]
+            const res = await startUpload(files)
+            console.log(res)
+            const url = res?.[0]?.ufsUrl;
+            console.log(url)
             //     if (projectId) {
             //         // TODO: Replace with actual API call to save message
             //         const res = await apiClient.projects.post()
@@ -64,7 +65,7 @@ export const AIChatBox = ({ projectId }: props) => {
             //     await apiClient.messages.post();
             // await apiClient.messages.post({ message: cleanMessage });
             if (!projectId) {
-                const res = await apiClient.projects.post({ messages: message })
+                const res = await apiClient.projects.post({ messages: message, imageUrl: url })
                 if (res.data?.id) {
                     router.push(`/projects/${res.data.id}`)
                     return;
@@ -73,7 +74,11 @@ export const AIChatBox = ({ projectId }: props) => {
 
             }
             if (projectId) {
-                await apiClient.messages.post({ message: cleanMessage, projectId });
+                await apiClient.messages.post({
+                    message: cleanMessage,
+                    projectId,
+                    imageUrl: url,
+                });
             }
 
         }
@@ -112,6 +117,13 @@ export const AIChatBox = ({ projectId }: props) => {
             form.reset() // Clear the textarea after submission
         }
     }
+    const onSelect = (message: string) => {
+        form.setValue("message", message, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: true,
+        });
+    };
     return (
         <div className="mx-auto flex flex-col w-full gap-4">
             <div className="relative z-10 flex flex-col w-full mx-auto content-center">
@@ -196,6 +208,21 @@ export const AIChatBox = ({ projectId }: props) => {
                 </form>
 
             </div>
+            {!projectId && (
+                <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                    {DEFAULT_PROMPTS.map((p) => (
+                        <Button
+                            key={p.title}
+                            onClick={() => onSelect(p.prompt)}
+                            variant="outline"
+                            className="cursor-pointer"
+                        >
+                            {p.emoji} {p.title}
+                        </Button>
+                    ))}
+                </div>
+            )}
+
         </div>
     )
 }

@@ -13,6 +13,7 @@ export const projects = new Elysia({ prefix: '/projects' })
                             content: body.messages,
                             role: "USER",
                             type: "RESULT",
+                            imageUrl: body.imageUrl
 
                         }
                     }
@@ -25,6 +26,7 @@ export const projects = new Elysia({ prefix: '/projects' })
                     data: {
                         message: body.messages,
                         projectId: createProject.id,
+                        imageUrl: body.imageUrl,
                     }
                 })
             } catch (queueError) {
@@ -45,6 +47,7 @@ export const projects = new Elysia({ prefix: '/projects' })
         {
             body: z.object({
                 messages: z.string().min(1, 'Message is required').max(1000, 'Message is too long'),
+                imageUrl: z.string().optional(),
 
             })
         }

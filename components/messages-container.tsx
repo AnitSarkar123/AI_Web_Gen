@@ -4,6 +4,7 @@ import { CodeFragment, Message } from '@/lib/generated/prisma/client';
 import { set } from 'zod';
 import { create } from 'domain';
 import { MessageCard } from './message-card';
+import { AIChatBox } from './ai-chatbox';
 interface props{
     projectId: string;
     intialMessages: (Message &{codeFragment:CodeFragment | null })[] | null;
@@ -39,6 +40,9 @@ export default function MessagesContainer({
         </div>
 
         </div>
+      <div className="relative p-3">
+        <AIChatBox projectId={projectId} />
+      </div>
       
     </div>
   )

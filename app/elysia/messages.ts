@@ -29,7 +29,8 @@ export const message = new Elysia({ prefix: '/messages' })
                     content: body.message,
                     projectId: body.projectId,
                     role: "USER",
-                    type: "RESULT"
+                    type: "RESULT",
+                    imageUrl: body.imageUrl,
                 }
             })
             await inngest.send({
@@ -37,6 +38,7 @@ export const message = new Elysia({ prefix: '/messages' })
                 data: { 
                     projectId: body.projectId,
                     message: createdMessage.content,
+                    imageUrl: body.imageUrl,
                 },
             });
 
@@ -52,7 +54,8 @@ export const message = new Elysia({ prefix: '/messages' })
     {
         body: z.object({
             message: z.string().min(1, 'Message is required').max(1000, 'Message is too long'),
-            projectId: z.string().min(3, 'Project ID is required')
+            projectId: z.string().min(3, 'Project ID is required'),
+            imageUrl: z.string().optional(),
         })
     }
 );

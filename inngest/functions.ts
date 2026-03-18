@@ -5,6 +5,7 @@ import { getSandbox, toProjectPath } from "@/lib/sandbox";
 import z from "zod";
 import { PROMPT } from "./prompt";
 import { db } from "@/lib/db";
+import { extractDesignSpecFromImage } from "@/lib/extract-design-spec";
 interface codeAgentState {
   summary?: string;
   files?: Record<string, string>;
@@ -24,7 +25,7 @@ export const codeAgentFunction = inngest.createFunction(
       system: PROMPT,
       description: 'An expert coding agent',
       model: openai({
-        model: 'meta/llama-3.3-70b-instruct',
+        model: 'meta/llama-4-maverick-17b-128e-instruct',
         apiKey: process.env.NVIDIA_API_KEY,
         baseUrl: process.env.NVIDIA_API_URL
       }),
@@ -228,6 +229,21 @@ export const codeAgentFunction = inngest.createFunction(
         `${inputMessage}\n\nIMPORTANT: You MUST call createOrUpdateFiles with the complete file contents NOW before writing <task_summary>. Do not skip this step.`
       );
     }
+    const builderInput = await step.run('build-agent-input', async () => {
+      if (!event.data.imageUrl) return event.data.message;
+      const spec = await extractDesignSpecFromImage({
+        imageUrl: event.data.imageUrl,
+        userHint: event.data.message,
+      })
+      return [
+        `designSpec:\n` +
+        `${JSON.stringify(spec, null, 2)}\n\n` +
+        `User notes:\n` +
+        `${event.data.message}`
+      ].join("\n")
+
+    })
+    const result1 = await network.run(builderInput)
 
     await step.run("ensure-dev-server", async () => {
       const sandbox = await getSandbox(sandboxId);
