@@ -1,5 +1,5 @@
 import { AIChatBox } from "@/components/ai-chatbox";
-// import ClerkPricingTable from "@/components/clerk-pricing-table";
+import ClerkPricingTable from "@/components/clerk-pricing-table";
 import { Separator } from "@/components/ui/separator";
 
 export default async function Page() {
@@ -20,7 +20,7 @@ export default async function Page() {
 
       <Separator className="my-10" />
 
-      {/* <ClerkPricingTable /> */}
+      <ClerkPricingTable />
     </div>
   );
 }

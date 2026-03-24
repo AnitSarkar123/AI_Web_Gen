@@ -9,10 +9,12 @@ import {
 import { useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { IconCode, IconWorld } from "@tabler/icons-react";
-import MessagesContainer from "./messages-container";
+// import MessagesContainer from "./messages-container";
+// import MessagesContainer from "./messages-container";
 // import FileExplorer from "./file-explorer";
 import FileExplorer from "./file-explorer";
 import { CodeWebView } from "./code-web-view";
+import { MessagesContainer } from './messages-container';
 
 interface Props {
     projectId: string;
@@ -22,8 +24,9 @@ interface Props {
 export function ProjectView({ projectId, initialMessages }: Props) {
     const [activeCodeFragment, setActiveCodeFragment] =
         useState<CodeFragment | null>(() => {
+            if (!initialMessages || !Array.isArray(initialMessages)) return null;
             return (
-                initialMessages?.find((message) => message.codeFragment)?.codeFragment ?? null
+                initialMessages.find((message) => message.codeFragment)?.codeFragment ?? null
             );
         });
     const [tabState, setTabState] = useState<"preview" | "code">("preview");
@@ -50,7 +53,7 @@ export function ProjectView({ projectId, initialMessages }: Props) {
             <ResizablePanel defaultSize={20} minSize={20}>
                 <MessagesContainer
                     projectId={projectId}
-                    intialMessages={initialMessages}
+                    initialMessages={initialMessages}
                     activeCodeFragment={activeCodeFragment}
                     setActiveCodeFragment={setActiveCodeFragment}
                 />

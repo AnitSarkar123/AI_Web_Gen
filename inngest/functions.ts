@@ -1,34 +1,102 @@
 import { Sandbox } from "@e2b/code-interpreter";
 import { inngest } from "./client";
-import { createAgent, createTool, TextMessage, createNetwork, Tool, createState, openai } from "@inngest/agent-kit";
+import { createAgent, createTool, TextMessage, createNetwork, Tool, createState, openai, gemini, Message } from "@inngest/agent-kit";
 import { getSandbox, toProjectPath } from "@/lib/sandbox";
 import z from "zod";
 import { PROMPT } from "./prompt";
 import { db } from "@/lib/db";
 import { extractDesignSpecFromImage } from "@/lib/extract-design-spec";
 import { searchUnsplashPhoto, UnsplashAttribution } from "@/lib/unsplash";
+// import { Public } from "@prisma/client/runtime/library";
+import { channel, topic } from "@inngest/realtime";
+// import { Project } from '../lib/generated/prisma/client';
+import { SortOrder } from '../lib/generated/prisma/internal/prismaNamespace';
 interface codeAgentState {
   summary?: string;
   files?: Record<string, string>;
 }
+export const userChannel = channel("project").addTopic(
+  topic("projectInfo").type<string>()
+)
 export const codeAgentFunction = inngest.createFunction(
   { id: "code-agent" },
   { event: "code-agent/codeAgent.run" },
-  async ({ event, step }) => {
+  async ({ event, step, publish }) => {
     const sandboxId = await step.run("get-or-Create Sandbox", async () => {
+      const Project = await db.project.findUnique({
+        where: { id: event.data.projectId },
+        select: { sandboxId: true }
+      })
+      if (Project?.sandboxId) {
+        const sandbox = await Sandbox.connect(Project.sandboxId, {
+          timeoutMs: 15 * 60 * 1000,
+        });
 
-      const sandbox = await Sandbox.create("forgeai-v1", { timeoutMs: 15 * 60 * 1000 });
-      return sandbox.sandboxId;
+        return sandbox.sandboxId;
+      }
+
+      const createdSandbox = await Sandbox.create("forgeai-v1", { timeoutMs: 15 * 60 * 1000 });
+      await db.project.update({
+        where: { id: event.data.projectId },
+        data: { sandboxId: createdSandbox.sandboxId },
+      });
+      return createdSandbox.sandboxId;
     });
+    const getPreviousMessages = await step.run('get-previous-messages', async () => {
+      const messages = await db.message.findMany({
+        where: { projectId: event.data.projectId },
+        orderBy: { updatedAt: "desc" },
+        take: 10,
+      });
+      const lastMessages = messages.map((message) => {
+        return {
+          type: 'text',
+          role: message.role === "ASSISTANT" ? "assistant" : "user",
+          content: message.content,
+        }
+
+      }).reverse()
+      // return messages;
+      return lastMessages as Message[];
+    });
+    const getPreviousCodeFiles = await step.run('get-previous-code-files', async () => {
+      const lastMessages = await db.message.findFirst({
+        where: {
+          projectId: event.data.projectId,
+          codeFragment: {
+            isNot: null
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+        include: {
+          codeFragment: true
+        }
+
+
+      });
+      return (lastMessages?.codeFragment?.files as Record<string, string>) || {};
+
+
+    });
+    const CodingAgentState = createState<codeAgentState>({
+      summary: "",
+      files: getPreviousCodeFiles,
+
+    },
+
+      { messages: getPreviousMessages },
+    )
+
+
 
     const codeAgent = createAgent({
       name: 'coding agent',
       system: PROMPT,
       description: 'An expert coding agent',
-      model: openai({
-        model: 'qwen/qwen3-coder:free',
-        apiKey: process.env.OPENROUTER_API_KEY,
-        baseUrl: process.env.OPENROUTER_URL
+      model: gemini({
+        model: 'gemini-2.5-flash-lite',
+        apiKey: process.env.GEMINI_API_KEY,
+
       }),
       tools: [
         createTool({
@@ -38,6 +106,9 @@ export const codeAgentFunction = inngest.createFunction(
             command: z.string().describe('the command to run in the terminal')
           }),
           handler: async ({ command }) => {
+            await publish(
+              await userChannel().projectInfo("installing packages inside terminal...")
+            )
             const buffers = { stdout: "", stderr: "" }
 
             try {
@@ -69,6 +140,9 @@ export const codeAgentFunction = inngest.createFunction(
             maxDepth: z.number().int().min(1).max(10).default(4),
           }),
           handler: async ({ path, recursive, maxDepth }) => {
+            await publish(
+              await userChannel().projectInfo("Listing Files ...")
+            )
             try {
               const sandbox = await getSandbox(sandboxId);
               const target = toProjectPath(path);
@@ -91,6 +165,9 @@ export const codeAgentFunction = inngest.createFunction(
             files: z.array(z.object({ path: z.string(), content: z.string() }))
           }),
           handler: async ({ files }, { step, network }: Tool.Options<codeAgentState>) => {
+            await publish(
+              await userChannel().projectInfo("Generating project Files...")
+            )
             const newFiles = await step?.run("createOrUpdateFiles", async () => {
               try {
                 const updatedFiles = network.state.data.files || {};
@@ -123,6 +200,9 @@ export const codeAgentFunction = inngest.createFunction(
             files: z.array(z.string())
           }),
           handler: async ({ files }, { step }) => {
+            await publish(
+              await userChannel().projectInfo("Reading project Files...")
+            )
             return await step?.run("readFiles", async () => {
               try {
                 const contents: Record<string, string>[] = [];
@@ -170,11 +250,11 @@ export const codeAgentFunction = inngest.createFunction(
             filenameHint: z.string().default(""),
           }),
           handler: async ({ query, orientation, purpose, filenameHint }) => {
-            // await publish(
-            //   await projectChannel(event.data.projectId).projectInfo(
-            //     "Downloading images...",
-            //   ),
-            // );
+            await publish(
+              await userChannel().projectInfo(
+                "Downloading images...",
+              ),
+            );
             const accessKey = process.env.UNSPLASH_API_KEY;
 
             if (!accessKey) {
@@ -276,10 +356,11 @@ export const codeAgentFunction = inngest.createFunction(
       name: "codeing-agent-network",
       agents: [codeAgent],
       maxIter: 5,
-      defaultState: createState<codeAgentState>({
-        summary: "",
-        files: {},
-      }),
+      // defaultState: createState<codeAgentState>({
+      //   summary: "",
+      //   files: {},
+      // }),
+      defaultState: CodingAgentState,
       router: async ({ network }) => {
         const hasSummary = Boolean(network.state.data.summary);
         const hasFiles = Object.keys(network.state.data.files || {}).length > 0;
@@ -314,7 +395,7 @@ export const codeAgentFunction = inngest.createFunction(
       };
     }
 
-    let result = await network.run(inputMessage)
+    let result = await network.run(inputMessage, { state: CodingAgentState })
 
     // If AI responded but wrote zero files, retry once with explicit instruction
     if (Object.keys(result.state.data.files || {}).length === 0) {
@@ -336,9 +417,12 @@ export const codeAgentFunction = inngest.createFunction(
       ].join("\n")
 
     })
-    const result1 = await network.run(builderInput)
+    const result1 = await network.run(builderInput, { state: CodingAgentState })
 
     await step.run("ensure-dev-server", async () => {
+      await publish(
+        await userChannel().projectInfo("Ensure is Dev Server on or not...")
+      )
       const sandbox = await getSandbox(sandboxId);
 
       // Check whether something is already listening on :3000
@@ -371,11 +455,17 @@ export const codeAgentFunction = inngest.createFunction(
     });
 
     const sandboxurl = await step.run("get sandbox url", async () => {
+      await publish(
+        await userChannel().projectInfo("Generating Sandbox url...")
+      )
       const sandbox = await getSandbox(sandboxId);
       const host = sandbox.getHost(3000)
       return `https://${host}`;
     });
     await step.run("save-to db", async () => {
+      await publish(
+        await userChannel().projectInfo("Saving to database...")
+      )
       const filesMap = result.state.data.files || {};
       const hasError = Object.keys(result.state.data.files || {}).length === 0;
       if (hasError) {
@@ -410,6 +500,9 @@ export const codeAgentFunction = inngest.createFunction(
         }
       })
     })
+    await publish(
+      await userChannel().projectInfo("Project Demo is ready...")
+    )
     return {
       sandboxurl,
       title: "Code Fragment",

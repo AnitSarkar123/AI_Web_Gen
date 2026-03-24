@@ -9,7 +9,8 @@ export const message = new Elysia({ prefix: '/messages' })
             where: {
                 projectId: query.projectId
             },
-            orderBy: { updatedAt: "desc" },
+            // return messages in chronological order (oldest first)
+            orderBy: { createdAt: "asc" },
             include: {
                 codeFragment: true
             }

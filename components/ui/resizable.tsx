@@ -2,7 +2,7 @@
 
 import { GripVerticalIcon } from "lucide-react"
 import * as ResizablePrimitive from "react-resizable-panels"
-
+import { IconSquareToggle } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 
 function ResizablePanelGroup({
@@ -42,8 +42,8 @@ function ResizableHandle({
       {...props}
     >
       {withHandle && (
-        <div className="bg-border z-10 flex h-4 w-3 items-center justify-center rounded-xs border">
-          <GripVerticalIcon className="size-2.5" />
+        <div className="h-6 w-6 rounded-lg z-10 flex shrink-0 bg-white shadow-lg items-center shadow-neutral-500">
+          <IconSquareToggle className="size-6" />
         </div>
       )}
     </ResizablePrimitive.Separator>

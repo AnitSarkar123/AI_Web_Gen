@@ -1,24 +1,37 @@
 "use client"
 import { Controller, useForm } from "react-hook-form"
 import { FieldGroup } from "./ui/field"
-import React from "react"
+import React, { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 // import { zhCN } from "date-fns/locale"
-import { set, z } from 'zod'
+import { z } from 'zod'
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Textarea } from "./ui/textarea"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from "./ui/dropdown-menu"
-import { Plus as IconPlus, Paperclip as IconPaperclip, Loader2 as IconLoader2, ArrowUp as IconArrowUp, X as IconX } from "lucide-react"
+import { Plus as IconPlus, Paperclip as IconPaperclip, Loader2 as IconLoader2, ArrowUp as IconArrowUp, X as IconX, Divide } from "lucide-react"
 import { Button } from "./ui/button"
 import { fileURLToPath } from 'node:url';
 import { useUploadThing } from "@/lib/uploadthing"
 import { toast } from "sonner"
-import { projects } from '../app/elysia/projects';
-
+// import { projects } from '../app/elysia/projects';
+import { useInngestSubscription } from "@inngest/realtime/hooks";
 // TODO: Import or define apiClient - replace with your actual API client
 import { apiClient } from '@/lib/api-client';
 import { useRouter } from "next/navigation"
 import { DEFAULT_PROMPTS } from "@/constants"
+import { useClerk, Protect, PricingTable } from '@clerk/nextjs';
+import { fetchRealtimeSubscriptionToken } from "@/app/actions/get-inngest-sub-token"
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { CheckoutButton } from "@clerk/nextjs/experimental";
+
 
 interface props {
     projectId?: string
@@ -32,40 +45,74 @@ export const AIChatBox = ({ projectId }: props) => {
         resolver: zodResolver(messageSchema),
         defaultValues: {
             message: "",
+        },
+    });
+    const clerk = useClerk();
 
+    const [attachedFile, setAttachedFile] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState("");
+    const [isOpen, setIsOpen] = useState(false);
+    const [status, setStatus] = useState<string | null>(null);
+    const [isProOpen, setIsProOpen] = useState(flase)
+
+    const { startUpload, isUploading } = useUploadThing("designImageUploader");
+
+    const fileRef = useRef<HTMLInputElement | null>(null);
+    const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const notificationsEnabled = Boolean(projectId);
+
+    const { latestData } = useInngestSubscription({
+        refreshToken: notificationsEnabled
+            ? () => fetchRealtimeSubscriptionToken(projectId!)
+            : undefined,
+    });
+
+    useEffect(() => {
+        const message = latestData?.data;
+
+        if (!message) return;
+
+        setStatus(message);
+
+        if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+
+        if (message === "Demo is ready") {
+            router.refresh();
+
+            clearTimerRef.current = setTimeout(() => setStatus(null), 5000);
         }
-    })
-    const [attachedFiles, setAttachedFiles] = React.useState<File | null>(null)
-    const [imagePreview, setImagePreview] = React.useState("")
-    const { startUpload, isUploading } = useUploadThing("designImageUploader")
 
-    const fileRef = React.useRef<HTMLInputElement>(null)
+        return () => {
+            if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+        };
+    }, [latestData?.data, router]);
+
     const onSubmit = async ({ message }: z.infer<typeof messageSchema>) => {
         const cleanMessage = message.trim() ?? "";
+
         try {
-            if (!cleanMessage && attachedFiles) {
-                toast.error("Please enter a message before submitting an attachment.")
+            if (!cleanMessage && attachedFile) {
+                toast.error("Type a message or upload an image");
                 return;
             }
-            const files = [attachedFiles as File]
-            const res = await startUpload(files)
-            console.log(res)
-            const url = res?.[0]?.ufsUrl;
-            console.log(url)
-            //     if (projectId) {
-            //         // TODO: Replace with actual API call to save message
-            //         const res = await apiClient.projects.post()
-            //         console.log("Message sent with attachment:", url, cleanMessage)
-            //         if (res) {
-            //             // router.push(`/projects/${res.data.id}`)
-            //             return;
-            //         }
 
-            //     }
-            //     await apiClient.messages.post();
-            // await apiClient.messages.post({ message: cleanMessage });
+            const files = [attachedFile as File];
+
+            let url = undefined;
+
+            if (attachedFile) {
+                const res = await startUpload(files);
+
+                url = res?.[0]?.ufsUrl;
+            }
+
+            if (!clerk.isSignedIn) {
+                clerk.openSignIn();
+                return;
+            }
             if (!projectId) {
-                const res = await apiClient.projects.post({ messages: message, imageUrl: url })
+                const res = await apiClient.projects.post({ messages: message })
                 if (res.data?.id) {
                     router.push(`/projects/${res.data.id}`)
                     return;
@@ -74,11 +121,7 @@ export const AIChatBox = ({ projectId }: props) => {
 
             }
             if (projectId) {
-                await apiClient.messages.post({
-                    message: cleanMessage,
-                    projectId,
-                    imageUrl: url,
-                });
+                await apiClient.messages.post({ message: cleanMessage, projectId });
             }
 
         }
@@ -87,7 +130,7 @@ export const AIChatBox = ({ projectId }: props) => {
 
         } finally {
             form.reset()
-            setAttachedFiles(null)
+            setAttachedFile(null)
             setImagePreview("")
             router.refresh()
         }
@@ -104,10 +147,10 @@ export const AIChatBox = ({ projectId }: props) => {
         }
         reader.readAsDataURL(file)
         setImagePreview(reader.result as string)
-        setAttachedFiles(file);
+        setAttachedFile(file);
     }
     const removeFile = () => {
-        setAttachedFiles(null)
+        setAttachedFile(null)
         setImagePreview("")
     }
     const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -127,14 +170,15 @@ export const AIChatBox = ({ projectId }: props) => {
     return (
         <div className="mx-auto flex flex-col w-full gap-4">
             <div className="relative z-10 flex flex-col w-full mx-auto content-center">
-                <form className="overflow-visible rounded-xl border p-2 bg-white border-black focus-within:border-black"
+                <form className="overflow-visible rounded-xl border p-2 bg-white
+        border-neutral-200 focus-within:border-neutral-200"
                     id="message-form"
                     onSubmit={form.handleSubmit(onSubmit)}>
-                    {imagePreview && attachedFiles && (
+                    {imagePreview && attachedFile && (
                         <div className="relative flex items-center w-fit gap-2 mb-2 overflow-hidden">
                             <div className="relative flex h-16 w-16 items-center justify-content">
                                 <Image
-                                    alt={attachedFiles.name}
+                                    alt={attachedFile.name}
                                     src={imagePreview}
                                     fill
                                     className="object-cover"
@@ -176,8 +220,17 @@ export const AIChatBox = ({ projectId }: props) => {
 
                                 </DropdownMenuTrigger >
                                 <DropdownMenuContent className="space-y-1">
+                                    <Protect feature="screenshort_upload" fallback={<DropdownMenuItem className="rounded-[calc(1rem-6px)] text-xs"
+                                        onClick={() => setIsOpen(true)}>
+                                        <div>
+                                            <IconPaperclip size={16} className="text-muted-foreground" />
+                                            <span>Attach files</span>
+                                        </div>
+
+
+                                    </DropdownMenuItem>}>
                                     <DropdownMenuItem className="rounded-[calc(1rem-6px)] text-xs"
-                                        onClick={() => fileRef.current!.click()}>
+                                            onClick={() => fileRef.current?.click()}>
                                         <div>
                                             <IconPaperclip size={16} className="text-muted-foreground" />
                                             <span>Attach files</span>
@@ -185,6 +238,8 @@ export const AIChatBox = ({ projectId }: props) => {
 
 
                                     </DropdownMenuItem>
+
+                                    </Protect>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -195,7 +250,7 @@ export const AIChatBox = ({ projectId }: props) => {
                                 type="submit"
                                 variant="default"
                                 form="message-form"
-                                disabled={form.formState.isSubmitting || isUploading}
+                                disabled={form.formState.isSubmitting || isUploading || !form.formState.isValidating}
 
                             >
                                 {form.formState.isSubmitting || isUploading ? <IconLoader2 className="size-4 animate-spin" size={16} /> : <IconArrowUp size={16} />}
@@ -222,6 +277,32 @@ export const AIChatBox = ({ projectId }: props) => {
                     ))}
                 </div>
             )}
+            <Dialog open={isOpen} onOpenChange={(open) => setIsOpen(open)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Upgrad to pro</DialogTitle>
+                        <DialogDescription>
+                            Upgrad to pro to access screenshot upload and inline code edit
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <DialogFooter>
+                        <DialogClose render={<Button variant="outline">Cancel</Button>} />
+                        <CheckoutButton
+                            planId="cplan_3BOrkk4HfbSciWASdd3nV704721"
+                            planPeriod="month"
+                        >
+                            <Button
+                                type="button"
+                                onClick={() => setIsOpen(false)}
+                                className="text-white"
+                            >
+                                Upgrad to pro
+                            </Button>
+                        </CheckoutButton>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
         </div>
     )

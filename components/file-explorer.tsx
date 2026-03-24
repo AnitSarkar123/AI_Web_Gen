@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { TreeView } from "./tree-view";
 import {
   ResizableHandle,
@@ -6,28 +6,28 @@ import {
   ResizablePanelGroup,
 } from "./ui/resizable";
 import { getLanguageFromExtension } from "@/lib/utils";
-// import { CodeView } from "./code-view";
 import { CodeView } from "./code-view";
 import { Button } from "./ui/button";
 import { IconFolders, IconLoader2 } from "@tabler/icons-react";
 import { SaveIcon } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
-// import { Protect } from "@clerk/nextjs";
+import { Protect } from "@clerk/nextjs";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-// import { CheckoutButton } from "@clerk/nextjs/experimental";
+import { CheckoutButton } from "@clerk/nextjs/experimental";
 
 type FileCollection = Record<string, string>;
 
 interface Props {
-  files?: FileCollection | null;
+  files: FileCollection;
   fragmentId: string;
   projectId: string;
   sandboxId: string;
@@ -39,10 +39,8 @@ export default function FileExplorer({
   projectId,
   sandboxId,
 }: Props) {
-  const safeFiles = useMemo(() => files ?? {}, [files]);
-
   const [selectedFile, setSelectedFile] = useState<string | null>(() => {
-    const fileKeys = Object.keys(safeFiles);
+    const fileKeys = Object.keys(files);
     return fileKeys.length > 0 ? fileKeys[0] : null;
   });
   const [localFiles, setLocalFiles] = useState<FileCollection>({});
@@ -50,18 +48,9 @@ export default function FileExplorer({
   const [isOpen, setIsOpen] = useState(false);
 
   const mergedFiles = useMemo(
-    () => ({ ...safeFiles, ...localFiles }),
-    [safeFiles, localFiles],
+    () => ({ ...files, ...localFiles }),
+    [files, localFiles],
   );
-
-  useEffect(() => {
-    if (!selectedFile) {
-      const fileKeys = Object.keys(mergedFiles);
-      if (fileKeys.length > 0) {
-        setSelectedFile(fileKeys[0]);
-      }
-    }
-  }, [mergedFiles, selectedFile]);
 
   const saveChanges = async () => {
     try {
@@ -70,9 +59,6 @@ export default function FileExplorer({
       await apiClient
         .fragments({ fragmentId })
         .patch({ files: localFiles, projectId, sandboxId });
-
-      toast.success("Changes saved to sandbox");
-      setLocalFiles({});
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -115,7 +101,22 @@ export default function FileExplorer({
                 >
                   <IconFolders className="size-4" />
                 </Button>
-                
+                <Protect
+                  feature="inline_code_edit"
+                  fallback={
+                    <Button
+                      className="p-1 h-5 w-5 border-none rounded-full cursor-pointer"
+                      variant="outline"
+                      onClick={() => setIsOpen(true)}
+                    >
+                      {isLoading ? (
+                        <IconLoader2 className="size-4 animate-spin" />
+                      ) : (
+                        <SaveIcon className="size-4" />
+                      )}
+                    </Button>
+                  }
+                >
                   <Button
                     className="p-1 h-5 w-5 border-none rounded-full cursor-pointer"
                     variant="outline"
@@ -127,7 +128,7 @@ export default function FileExplorer({
                       <SaveIcon className="size-4" />
                     )}
                   </Button>
-                
+                </Protect>
               </div>
               <div className="flex flex-1 overflow-auto h-full w-full">
                 <CodeView
@@ -159,8 +160,8 @@ export default function FileExplorer({
           </DialogHeader>
 
           <DialogFooter>
-            {/* <DialogClose render={<Button variant="outline">Cancel</Button>} /> */}
-            {/* <CheckoutButton
+            <DialogClose render={<Button variant="outline">Cancel</Button>} />
+            <CheckoutButton
               planId="cplan_38YBTL0vjqUlBGtbOBiNJYpRskb"
               planPeriod="month"
             >
@@ -171,7 +172,7 @@ export default function FileExplorer({
               >
                 Upgrad to pro
               </Button>
-            </CheckoutButton> */}
+            </CheckoutButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
