@@ -2,9 +2,14 @@ import { inngest } from "@/inngest/client";
 import { db } from "@/lib/db";
 import Elysia from "elysia";
 import { z } from "zod";
+import { clerkPlugin } from "elysia-clerk";
+// import { requirePro } from "";
+import { requirePro } from "@/lib/pro-features";
+export const message = new Elysia({ prefix: '/messages' }).use(clerkPlugin())
+    .get('/', async ({ auth, status, query }) => {
+        const { userId } = auth();
 
-export const message = new Elysia({ prefix: '/messages' })
-    .get('/', async ({ query }) => {
+        if (!userId) return status(401, { error: "Unauthorized" });
         const message = await db.message.findMany({
             where: {
                 projectId: query.projectId
@@ -23,7 +28,15 @@ export const message = new Elysia({ prefix: '/messages' })
             })
         }
     )
-    .post('/', async ({ body }) => {
+    .post('/', async ({ auth, body, status }) => {
+        const { userId } = auth();
+
+        if (!userId) return status(401, { error: "Unauthorized" });
+        if (body.imageUrl) {
+            await requirePro(auth, status, "screenshort_upload");
+        }
+
+
         try {
             const createdMessage = await db.message.create({
                 data: {
@@ -32,6 +45,7 @@ export const message = new Elysia({ prefix: '/messages' })
                     role: "USER",
                     type: "RESULT",
                     imageUrl: body.imageUrl,
+                    userId
                 }
             })
             await inngest.send({
@@ -40,6 +54,8 @@ export const message = new Elysia({ prefix: '/messages' })
                     projectId: body.projectId,
                     message: createdMessage.content,
                     imageUrl: body.imageUrl,
+                    userId
+
                 },
             });
 

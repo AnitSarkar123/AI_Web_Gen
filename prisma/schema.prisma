@@ -30,6 +30,7 @@ model Project {
   message   Message[]
   sandboxId String?   @db.VarChar(64)
   imageUrl  String?
+  userId    String
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
@@ -43,6 +44,7 @@ model Message {
   imageUrl     String?
   projectId    String
   project      Project       @relation(references: [id], fields: [projectId], onDelete: Cascade)
+  userId    String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }

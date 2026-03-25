@@ -19,7 +19,7 @@ import { useInngestSubscription } from "@inngest/realtime/hooks";
 import { apiClient } from '@/lib/api-client';
 import { useRouter } from "next/navigation"
 import { DEFAULT_PROMPTS } from "@/constants"
-import { useClerk, Protect, PricingTable } from '@clerk/nextjs';
+import { useClerk, Show, PricingTable } from '@clerk/nextjs';
 import { fetchRealtimeSubscriptionToken } from "@/app/actions/get-inngest-sub-token"
 import {
     Dialog,
@@ -53,7 +53,7 @@ export const AIChatBox = ({ projectId }: props) => {
     const [imagePreview, setImagePreview] = useState("");
     const [isOpen, setIsOpen] = useState(false);
     const [status, setStatus] = useState<string | null>(null);
-    const [isProOpen, setIsProOpen] = useState(flase)
+    const [isProOpen, setIsProOpen] = useState(false)
 
     const { startUpload, isUploading } = useUploadThing("designImageUploader");
 
@@ -112,7 +112,7 @@ export const AIChatBox = ({ projectId }: props) => {
                 return;
             }
             if (!projectId) {
-                const res = await apiClient.projects.post({ messages: message })
+                const res = await apiClient.projects.post({ message: message })
                 if (res.data?.id) {
                     router.push(`/projects/${res.data.id}`)
                     return;
@@ -170,6 +170,11 @@ export const AIChatBox = ({ projectId }: props) => {
     return (
         <div className="mx-auto flex flex-col w-full gap-4">
             <div className="relative z-10 flex flex-col w-full mx-auto content-center">
+                {status && (
+                    <div className="font-medium text-sm px-2 py-6 shimmer-text tracking-wider">
+                        {status}
+                    </div>
+                )}
                 <form className="overflow-visible rounded-xl border p-2 bg-white
         border-neutral-200 focus-within:border-neutral-200"
                     id="message-form"
@@ -220,7 +225,7 @@ export const AIChatBox = ({ projectId }: props) => {
 
                                 </DropdownMenuTrigger >
                                 <DropdownMenuContent className="space-y-1">
-                                    <Protect feature="screenshort_upload" fallback={<DropdownMenuItem className="rounded-[calc(1rem-6px)] text-xs"
+                                    <Show when={{ plan: 'pro_plan' }} fallback={<DropdownMenuItem className="rounded-[calc(1rem-6px)] text-xs"
                                         onClick={() => setIsOpen(true)}>
                                         <div>
                                             <IconPaperclip size={16} className="text-muted-foreground" />
@@ -239,7 +244,7 @@ export const AIChatBox = ({ projectId }: props) => {
 
                                     </DropdownMenuItem>
 
-                                    </Protect>
+                                    </Show>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -250,7 +255,7 @@ export const AIChatBox = ({ projectId }: props) => {
                                 type="submit"
                                 variant="default"
                                 form="message-form"
-                                disabled={form.formState.isSubmitting || isUploading || !form.formState.isValidating}
+                                disabled={form.formState.isSubmitting || isUploading || !form.formState.isValid}
 
                             >
                                 {form.formState.isSubmitting || isUploading ? <IconLoader2 className="size-4 animate-spin" size={16} /> : <IconArrowUp size={16} />}

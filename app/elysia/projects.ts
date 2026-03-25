@@ -1,54 +1,71 @@
-import Elysia from "elysia";
-import { db } from "@/lib/db";
-import { z } from "zod";
 import { inngest } from "@/inngest/client";
-export const projects = new Elysia({ prefix: '/projects' })
-    .post('/', async ({ body, set }) => {
-        try {
-            const createProject = await db.project.create({
+import { db } from "@/lib/db";
+import Elysia from "elysia";
+import { z } from "zod";
+import { clerkPlugin } from "elysia-clerk";
+// import { requirePro } from "";
+import { requirePro } from "@/lib/pro-features";
+
+export const projects = new Elysia({ prefix: "/projects" })
+    .use(clerkPlugin())
+    .post(
+        "/",
+        async ({ auth, body, status }) => {
+            const { userId } = auth();
+
+            if (!userId) return status(401, { error: "Unauthorized" });
+
+            if (body.imageUrl) {
+                await requirePro(auth, status, "screenshort_upload");
+            }
+
+            const createdProject = await db.project.create({
                 data: {
                     name: `Project-${Date.now()}`,
+                    userId: userId as string,
                     message: {
                         create: {
-                            content: body.messages,
+                            content: body.message,
                             role: "USER",
                             type: "RESULT",
-                            imageUrl: body.imageUrl
+                            imageUrl: body.imageUrl,
+                            userId: userId as string,
+                        },
+                    },
+                },
+            });
 
-                        }
-                    }
-                }
-            })
+            await inngest.send({
+                name: "code-agent/codeAgent.run",
+                data: {
+                    message: body.message,
+                    projectId: createdProject.id,
+                    imageUrl: body.imageUrl,
+                    userId,
+                },
+            });
 
-            try {
-                await inngest.send({
-                    name: "code-agent/codeAgent.run",
-                    data: {
-                        message: body.messages,
-                        projectId: createProject.id,
-                        imageUrl: body.imageUrl,
-                    }
-                })
-            } catch (queueError) {
-                console.error("Failed to enqueue code generation:", queueError)
-            }
-
-            return createProject;
-        } catch (error) {
-            console.error("Failed to create project:", error)
-            set.status = 500;
-            return {
-                success: false,
-                error: "Failed to create project",
-            }
-        }
-
+            return createdProject;
     },
         {
             body: z.object({
-                messages: z.string().min(1, 'Message is required').max(1000, 'Message is too long'),
+                message: z
+                    .string()
+                    .min(3, "Message is required")
+                    .max(1000, "Message is too long"),
                 imageUrl: z.string().optional(),
-
-            })
-        }
+            }),
+        },
     )
+    .get("/", async ({ auth, status }) => {
+        const { userId } = auth();
+
+        if (!userId) return status(401, { error: "Unauthorized" });
+
+        const userProjects = await db.project.findMany({
+            where: { userId },
+            orderBy: { updatedAt: "desc" },
+        });
+
+        return userProjects;
+    });

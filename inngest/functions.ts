@@ -3,7 +3,7 @@ import { inngest } from "./client";
 import { createAgent, createTool, TextMessage, createNetwork, Tool, createState, openai, gemini, Message } from "@inngest/agent-kit";
 import { getSandbox, toProjectPath } from "@/lib/sandbox";
 import z from "zod";
-import { PROMPT } from "./prompt";
+import { PROMPT, TITLE_PROMPT } from "./prompt";
 import { db } from "@/lib/db";
 import { extractDesignSpecFromImage } from "@/lib/extract-design-spec";
 import { searchUnsplashPhoto, UnsplashAttribution } from "@/lib/unsplash";
@@ -11,6 +11,7 @@ import { searchUnsplashPhoto, UnsplashAttribution } from "@/lib/unsplash";
 import { channel, topic } from "@inngest/realtime";
 // import { Project } from '../lib/generated/prisma/client';
 import { SortOrder } from '../lib/generated/prisma/internal/prismaNamespace';
+import { de } from "date-fns/locale";
 interface codeAgentState {
   summary?: string;
   files?: Record<string, string>;
@@ -86,6 +87,21 @@ export const codeAgentFunction = inngest.createFunction(
 
       { messages: getPreviousMessages },
     )
+    const metadataAgent = createAgent({
+      name: "Forge AI Project namer Agent",
+      system: "You are an assistant that generates a concise and descriptive project name based on the conversation and code files. The project name should be 2-4 words, catchy, and reflect the main theme or functionality of the project.",
+      description: "An agent to generate project name",
+      model: gemini({
+        model: 'gemini-2.5-flash',
+        apiKey: process.env.GEMINI_API_KEY,
+      }),
+    })
+    const runNamingAgent = async (prompt: string) => {
+      const result = await metadataAgent.run(prompt);
+      const last = result.output.findLast((message) => message.role === "assistant") as TextMessage | undefined;
+      const projectName = last?.content ? (typeof last.content === "string" ? last.content : last.content.map((c) => c.text).join("")) : "Untitled Project";
+      return projectName.replace(/[^a-zA-Z0-9\s\-]/g, "").trim().slice(0, 50) || "Untitled Project";
+    }
 
 
 
@@ -94,7 +110,7 @@ export const codeAgentFunction = inngest.createFunction(
       system: PROMPT,
       description: 'An expert coding agent',
       model: gemini({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash',
         apiKey: process.env.GEMINI_API_KEY,
 
       }),
@@ -383,6 +399,7 @@ export const codeAgentFunction = inngest.createFunction(
             role: "ASSISTANT",
             type: "ERROR",
             projectId: event.data.projectId,
+            userId: event.data.userId,
           }
         })
       });
@@ -462,6 +479,19 @@ export const codeAgentFunction = inngest.createFunction(
       const host = sandbox.getHost(3000)
       return `https://${host}`;
     });
+    await step.run("generate-metadata", async () => {
+      await publish(
+        await userChannel().projectInfo("Generating project name...")
+      )
+      const projectName = await runNamingAgent(`${TITLE_PROMPT} ${event.data.message}`);
+      await db.project.update({
+        where: { id: event.data.projectId },
+        data: {
+          name: projectName || `Project-${Date.now()}`,
+        },
+      })
+    })
+
     await step.run("save-to db", async () => {
       await publish(
         await userChannel().projectInfo("Saving to database...")
@@ -475,6 +505,7 @@ export const codeAgentFunction = inngest.createFunction(
             role: "ASSISTANT",
             type: "ERROR",
             projectId: event.data.projectId,
+            userId: event.data.userId,
           }
         })
       }
@@ -487,6 +518,7 @@ export const codeAgentFunction = inngest.createFunction(
           role: "ASSISTANT",
           type: "RESULT",
           projectId: event.data.projectId,
+          userId: event.data.userId,
           codeFragment: {
             create: {
               sandboxUrl: sandboxurl,   // <-- capital U to match schema

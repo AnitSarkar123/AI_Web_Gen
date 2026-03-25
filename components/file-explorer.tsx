@@ -12,7 +12,8 @@ import { IconFolders, IconLoader2 } from "@tabler/icons-react";
 import { SaveIcon } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
-import { Protect } from "@clerk/nextjs";
+import { Show } from "@clerk/nextjs";
+// import { Protect} 
 import {
   Dialog,
   DialogClose,
@@ -101,8 +102,8 @@ export default function FileExplorer({
                 >
                   <IconFolders className="size-4" />
                 </Button>
-                <Protect
-                  feature="inline_code_edit"
+                <Show
+                  when={{ plan: 'pro_plan' }}
                   fallback={
                     <Button
                       className="p-1 h-5 w-5 border-none rounded-full cursor-pointer"
@@ -128,7 +129,7 @@ export default function FileExplorer({
                       <SaveIcon className="size-4" />
                     )}
                   </Button>
-                </Protect>
+                </Show>
               </div>
               <div className="flex flex-1 overflow-auto h-full w-full">
                 <CodeView
@@ -162,7 +163,7 @@ export default function FileExplorer({
           <DialogFooter>
             <DialogClose render={<Button variant="outline">Cancel</Button>} />
             <CheckoutButton
-              planId="cplan_38YBTL0vjqUlBGtbOBiNJYpRskb"
+              planId="cplan_3BOrkk4HfbSciWASdd3nV704721"
               planPeriod="month"
             >
               <Button

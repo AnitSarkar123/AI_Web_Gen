@@ -8,7 +8,9 @@ CREATE TYPE "MessageType" AS ENUM ('RESULT', 'ERROR');
 CREATE TABLE "Project" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "sandboxId" VARCHAR(64) NOT NULL,
+    "sandboxId" VARCHAR(64),
+    "imageUrl" TEXT,
+    "userId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -21,7 +23,9 @@ CREATE TABLE "Message" (
     "content" TEXT NOT NULL,
     "role" "MessageRole" NOT NULL,
     "type" "MessageType" NOT NULL,
+    "imageUrl" TEXT,
     "projectId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -38,6 +42,8 @@ CREATE TABLE "CodeFragment" (
     "sandboxId" VARCHAR(64) NOT NULL,
     "title" TEXT NOT NULL,
     "files" JSONB NOT NULL,
+    "imageUrl" TEXT,
+    "designSpec" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

@@ -164,7 +164,7 @@ export const TITLE_PROMPT = `
 You generate concise project titles for web apps.
 
 Rules:
-- 2 to 5 words max
+- 5 to 10 words max
 - Title Case
 - No quotes
 - No emojis

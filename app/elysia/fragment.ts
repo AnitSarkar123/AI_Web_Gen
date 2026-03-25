@@ -3,9 +3,14 @@ import { db } from "@/lib/db";
 import { getSandbox, toProjectPath } from "@/lib/sandbox";
 import Elysia from "elysia";
 import { z } from "zod";
-
-export const fragments = new Elysia({ prefix: '/fragments' })
-    .patch("/:fragmentId", async ({ params, body }) => {
+import { clerkPlugin } from "elysia-clerk";
+// import { requirePro } from "";
+import { requirePro } from "@/lib/pro-features";
+export const fragments = new Elysia({ prefix: '/fragments' }).use(clerkPlugin())
+    .patch("/:fragmentId", async ({ params, body, auth, status }) => {
+        const { userId } = auth();
+        if (!userId) return status(401, { error: "Unauthorized" });
+        await requirePro(auth, status, "inline_code_edits");
         const existingFragment = await db.codeFragment.findUnique({
             where:{id: params.fragmentId},
             select:{files:true,sandboxId:true},
