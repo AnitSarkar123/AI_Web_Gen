@@ -7,20 +7,33 @@ import { clerkPlugin } from "elysia-clerk";
 import { requirePro } from "@/lib/pro-features";
 export const message = new Elysia({ prefix: '/messages' }).use(clerkPlugin())
     .get('/', async ({ auth, status, query }) => {
-        const { userId } = auth();
+        try {
+            const { userId } = auth();
 
-        if (!userId) return status(401, { error: "Unauthorized" });
-        const message = await db.message.findMany({
-            where: {
-                projectId: query.projectId
-            },
-            // return messages in chronological order (oldest first)
-            orderBy: { createdAt: "asc" },
-            include: {
-                codeFragment: true
+            if (!userId) {
+                console.error("[messages GET] No userId from auth");
+                return status(401, { error: "Unauthorized" });
             }
-        })
-        return message;
+
+            console.log("[messages GET] Fetching messages for project:", query.projectId);
+
+            const messages = await db.message.findMany({
+                where: {
+                    projectId: query.projectId
+                },
+                orderBy: { createdAt: "asc" },
+                include: {
+                    codeFragment: true
+                }
+            });
+
+            console.log("[messages GET] Found", messages.length, "messages");
+            return messages;
+        } catch (error) {
+            console.error("[messages GET] Error fetching messages:", error);
+            const errorMessage = error instanceof Error ? error.message : "Unknown error";
+            return status(500, { error: `Failed to fetch messages: ${errorMessage}` });
+        }
     },
         {
             query: z.object({
@@ -29,15 +42,25 @@ export const message = new Elysia({ prefix: '/messages' }).use(clerkPlugin())
         }
     )
     .post('/', async ({ auth, body, status }) => {
-        const { userId } = auth();
-
-        if (!userId) return status(401, { error: "Unauthorized" });
-        if (body.imageUrl) {
-            await requirePro(auth, status, "screenshort_upload");
-        }
-
-
         try {
+            const { userId } = auth();
+
+            if (!userId) {
+                console.error("[messages POST] No userId from auth");
+                return status(401, { error: "Unauthorized" });
+            }
+
+            if (body.imageUrl) {
+                try {
+                    await requirePro(auth, status, "screenshort_upload");
+                } catch (proError) {
+                    console.error("[messages POST] Pro feature check failed:", proError);
+                    return status(403, { error: "Pro feature required" });
+                }
+            }
+
+            console.log("[messages POST] Creating message for project:", body.projectId.substring(0, 20));
+
             const createdMessage = await db.message.create({
                 data: {
                     content: body.message,
@@ -47,25 +70,31 @@ export const message = new Elysia({ prefix: '/messages' }).use(clerkPlugin())
                     imageUrl: body.imageUrl,
                     userId
                 }
-            })
-            await inngest.send({
-                name: "code-agent/codeAgent.run",
-                data: { 
-                    projectId: body.projectId,
-                    message: createdMessage.content,
-                    imageUrl: body.imageUrl,
-                    userId
-
-                },
             });
+
+            console.log("[messages POST] Message created:", createdMessage.id);
+
+            try {
+                await inngest.send({
+                    name: "code-agent/codeAgent.run",
+                    data: { 
+                        projectId: body.projectId,
+                        message: createdMessage.content,
+                        imageUrl: body.imageUrl,
+                        userId
+                    },
+                });
+                console.log("[messages POST] Inngest event sent successfully");
+            } catch (inngestError) {
+                console.error("[messages POST] Inngest send failed:", inngestError);
+                // Don't return error here - message was already created
+            }
 
             return createdMessage;
         } catch (error) {
-            console.error("Inngest send error:", error);
-            return { 
-                success: false, 
-                error: "Failed to send event" 
-            };
+            console.error("[messages POST] Unhandled error:", error);
+            const errorMessage = error instanceof Error ? error.message : "Unknown error";
+            return status(500, { error: `Failed to create message: ${errorMessage}` });
         }
     },
     {

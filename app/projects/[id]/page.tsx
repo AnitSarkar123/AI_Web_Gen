@@ -13,7 +13,12 @@ export default async function ProjectPage({
 
     const apiClient = getApiClient(requestHeaders);
 
-    const { data } = await apiClient.messages.get({ query: { projectId: id } });
+    const result = await apiClient.messages.get({ query: { projectId: id } });
+    
+    // Handle both Response and array types from Eden
+    const messages = (result && typeof result === 'object' && Array.isArray(result)) 
+        ? result 
+        : ((result as unknown as { data: typeof result }) || {}).data || null;
 
-    return <ProjectView projectId={id} initialMessages={data} />;
+    return <ProjectView projectId={id} initialMessages={messages} />;
 }

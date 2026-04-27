@@ -1,6 +1,7 @@
 import { Sandbox } from "@e2b/code-interpreter";
 import { inngest } from "./client";
-import { createAgent, createTool, TextMessage, createNetwork, Tool, createState, openai, gemini, Message } from "@inngest/agent-kit";
+import { createAgent, createTool, TextMessage, createNetwork, Tool, createState, openai, Message } from "@inngest/agent-kit";
+import OpenAI from "openai";
 import { getSandbox, toProjectPath } from "@/lib/sandbox";
 import z from "zod";
 import { PROMPT, TITLE_PROMPT } from "./prompt";
@@ -10,8 +11,7 @@ import { searchUnsplashPhoto, UnsplashAttribution } from "@/lib/unsplash";
 // import { Public } from "@prisma/client/runtime/library";
 import { channel, topic } from "@inngest/realtime";
 // import { Project } from '../lib/generated/prisma/client';
-import { SortOrder } from '../lib/generated/prisma/internal/prismaNamespace';
-import { de } from "date-fns/locale";
+
 interface codeAgentState {
   summary?: string;
   files?: Record<string, string>;
@@ -20,10 +20,15 @@ export const userChannel = channel("project").addTopic(
   topic("projectInfo").type<string>()
 )
 export const codeAgentFunction = inngest.createFunction(
-  { id: "code-agent" },
+  { 
+    id: "code-agent",
+    retries: 3,
+  },
   { event: "code-agent/codeAgent.run" },
   async ({ event, step, publish }) => {
-    const sandboxId = await step.run("get-or-Create Sandbox", async () => {
+    try {
+      // Add error boundary around entire function
+      const sandboxId = await step.run("get-or-Create Sandbox", async () => {
       const Project = await db.project.findUnique({
         where: { id: event.data.projectId },
         select: { sandboxId: true }
@@ -87,33 +92,68 @@ export const codeAgentFunction = inngest.createFunction(
 
       { messages: getPreviousMessages },
     )
-    const metadataAgent = createAgent({
-      name: "Forge AI Project namer Agent",
-      system: "You are an assistant that generates a concise and descriptive project name based on the conversation and code files. The project name should be 2-4 words, catchy, and reflect the main theme or functionality of the project.",
-      description: "An agent to generate project name",
-      model: gemini({
-        model: 'gemini-2.5-flash',
-        apiKey: process.env.GEMINI_API_KEY,
-      }),
-    })
+    
+    // Debug: Log model configuration
+    console.log("[codeAgentFunction] Model config:", {
+      apiKey: process.env.OPENAI_API_KEY ? `${process.env.OPENAI_API_KEY.substring(0, 20)}...` : "NOT SET",
+      baseURL: process.env.OPENAI_API_ENDPOINT,
+      model: process.env.OPENAI_MODEL_NAME,
+    });
+    
+    // Fast naming using direct OpenAI API (not agent framework)
     const runNamingAgent = async (prompt: string) => {
-      const result = await metadataAgent.run(prompt);
-      const last = result.output.findLast((message) => message.role === "assistant") as TextMessage | undefined;
-      const projectName = last?.content ? (typeof last.content === "string" ? last.content : last.content.map((c) => c.text).join("")) : "Untitled Project";
-      return projectName.replace(/[^a-zA-Z0-9\s\-]/g, "").trim().slice(0, 50) || "Untitled Project";
+      try {
+        console.log("[codeAgentFunction] Starting name generation...");
+        const startTime = Date.now();
+        
+        const client = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY || "",
+          baseURL: process.env.OPENAI_API_ENDPOINT,
+          timeout: 30000, // 30 second timeout
+        });
+        
+        const response = await client.messages.create({
+          model: process.env.OPENAI_MODEL_NAME || "gpt-4o-mini",
+          max_tokens: 50,
+          system: "You are an assistant that generates a concise and descriptive project name. Output ONLY the project name (2-4 words, no quotes, no explanation).",
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+        });
+        
+        const elapsed = Date.now() - startTime;
+        console.log(`[codeAgentFunction] Name generation completed in ${elapsed}ms`);
+        
+        const content = response.content[0];
+        if (content.type === "text") {
+          const projectName = content.text
+            .replace(/[^a-zA-Z0-9\s\-]/g, "")
+            .trim()
+            .slice(0, 50) || "Untitled Project";
+          console.log(`[codeAgentFunction] Generated project name: "${projectName}"`);
+          return projectName;
+        }
+        
+        return "Untitled Project";
+      } catch (error) {
+        console.error("[codeAgentFunction] Name generation error:", error);
+        throw error;
+      }
     }
-
-
 
     const codeAgent = createAgent({
       name: 'coding agent',
       system: PROMPT,
       description: 'An expert coding agent',
-      model: gemini({
-        model: 'gemini-2.5-flash',
-        apiKey: process.env.GEMINI_API_KEY,
-
-      }),
+      model: openai({
+    model: process.env.OPENAI_MODEL_NAME || "gpt-4o-mini",
+    apiKey: process.env.OPENAI_API_KEY,
+    baseUrl: process.env.OPENAI_API_ENDPOINT,
+    defaultParameters: { temperature: 0.5 },
+  }),
       tools: [
         createTool({
           name: 'terminal',
@@ -434,7 +474,7 @@ export const codeAgentFunction = inngest.createFunction(
       ].join("\n")
 
     })
-    const result1 = await network.run(builderInput, { state: CodingAgentState })
+    await network.run(builderInput, { state: CodingAgentState })
 
     await step.run("ensure-dev-server", async () => {
       await publish(
@@ -541,6 +581,36 @@ export const codeAgentFunction = inngest.createFunction(
       files: result.state.data.files,
       summary: result.state.data.summary
     };
+    } catch (error) {
+      // Handle errors gracefully
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("[codeAgentFunction] Error:", errorMessage, error);
+      
+      // Publish error to frontend
+      await publish(
+        await userChannel().projectInfo(`Error: ${errorMessage}`)
+      ).catch(() => {
+        // Silent fail on publish error
+      });
+      
+      // Save error to database
+      try {
+        await db.message.create({
+          data: {
+            content: `Failed to generate code: ${errorMessage}`,
+            role: "ASSISTANT",
+            type: "ERROR",
+            projectId: event.data.projectId,
+            userId: event.data.userId,
+          }
+        });
+      } catch (dbError) {
+        console.error("[codeAgentFunction] Failed to save error to database:", dbError);
+      }
+      
+      // Re-throw so Inngest retry logic kicks in
+      throw new Error(`Code generation failed: ${errorMessage}`);
+    }
   },
 );
 

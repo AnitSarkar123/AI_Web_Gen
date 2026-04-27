@@ -8,9 +8,8 @@ import { z } from 'zod'
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Textarea } from "./ui/textarea"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from "./ui/dropdown-menu"
-import { Plus as IconPlus, Paperclip as IconPaperclip, Loader2 as IconLoader2, ArrowUp as IconArrowUp, X as IconX, Divide } from "lucide-react"
+import { Plus as IconPlus, Paperclip as IconPaperclip, Loader2 as IconLoader2, ArrowUp as IconArrowUp, X as IconX } from "lucide-react"
 import { Button } from "./ui/button"
-import { fileURLToPath } from 'node:url';
 import { useUploadThing } from "@/lib/uploadthing"
 import { toast } from "sonner"
 // import { projects } from '../app/elysia/projects';
@@ -19,7 +18,7 @@ import { useInngestSubscription } from "@inngest/realtime/hooks";
 import { apiClient } from '@/lib/api-client';
 import { useRouter } from "next/navigation"
 import { DEFAULT_PROMPTS } from "@/constants"
-import { useClerk, Show, PricingTable } from '@clerk/nextjs';
+import { useClerk, Show } from '@clerk/nextjs';
 import { fetchRealtimeSubscriptionToken } from "@/app/actions/get-inngest-sub-token"
 import {
     Dialog,
@@ -53,7 +52,6 @@ export const AIChatBox = ({ projectId }: props) => {
     const [imagePreview, setImagePreview] = useState("");
     const [isOpen, setIsOpen] = useState(false);
     const [status, setStatus] = useState<string | null>(null);
-    const [isProOpen, setIsProOpen] = useState(false)
 
     const { startUpload, isUploading } = useUploadThing("designImageUploader");
 
@@ -92,49 +90,85 @@ export const AIChatBox = ({ projectId }: props) => {
         const cleanMessage = message.trim() ?? "";
 
         try {
-            if (!cleanMessage && attachedFile) {
+            if (!cleanMessage && !attachedFile) {
                 toast.error("Type a message or upload an image");
                 return;
             }
 
-            const files = [attachedFile as File];
-
-            let url = undefined;
+            let imageUrl: string | undefined;
 
             if (attachedFile) {
-                const res = await startUpload(files);
-
-                url = res?.[0]?.ufsUrl;
+                const uploadRes = await startUpload([attachedFile]);
+                imageUrl = uploadRes?.[0]?.ufsUrl;
             }
 
             if (!clerk.isSignedIn) {
                 clerk.openSignIn();
                 return;
             }
+            
             if (!projectId) {
-                const res = await apiClient.projects.post({ message: message })
-                if (res.data?.id) {
-                    router.push(`/projects/${res.data.id}`)
+                const res = await apiClient.projects.post({ message: cleanMessage, imageUrl });
+                
+                console.log("[AIChatBox] POST /projects response:", res);
+                
+                // Handle Treaty response wrapper
+                let projectData: unknown = res;
+                
+                // Treaty might wrap in { data } or { error } 
+                if (res && typeof res === 'object') {
+                    if ('error' in res && typeof (res as Record<string, unknown>).error === 'string') {
+                        const errorMsg = (res as Record<string, unknown>).error as string;
+                        console.error("Project creation error:", errorMsg);
+                        toast.error(errorMsg || "Failed to create project");
+                        return;
+                    }
+                    
+                    if ('data' in res) {
+                        projectData = (res as Record<string, unknown>).data;
+                    }
+                }
+                
+                // Extract project ID from response
+                if (projectData && typeof projectData === 'object' && 'id' in projectData) {
+                    const extractedId = (projectData as unknown as { id: string }).id;
+                    console.log("[AIChatBox] Project created successfully:", extractedId);
+                    router.push(`/projects/${extractedId}`);
                     return;
                 }
-
-
+                
+                console.error("Unexpected response format - no id field:", projectData);
+                toast.error("Failed to create project - invalid response");
+                return;
             }
+            
             if (projectId) {
-                await apiClient.messages.post({ message: cleanMessage, projectId });
+                const res = await apiClient.messages.post({ message: cleanMessage, projectId, imageUrl });
+                
+                console.log("[AIChatBox] POST /messages response:", res);
+                
+                // Check if response is an error
+                if (res && typeof res === 'object' && 'error' in res && typeof (res as Record<string, unknown>).error === 'string') {
+                    const errorMsg = (res as Record<string, unknown>).error as string;
+                    console.error("Message creation error:", errorMsg);
+                    toast.error(errorMsg || "Failed to send message");
+                    return;
+                }
+                
+                console.log("[AIChatBox] Message sent successfully");
             }
-
         }
         catch (error) {
-            toast.error("Failed to send message. Please try again.");
-
-        } finally {
-            form.reset()
-            setAttachedFile(null)
-            setImagePreview("")
-            router.refresh()
+            console.error("Error sending message:", error);
+            const errorMsg = error instanceof Error ? error.message : "Unknown error";
+            toast.error(`Failed to send message: ${errorMsg}`);
+        } 
+        finally {
+            form.reset();
+            setAttachedFile(null);
+            setImagePreview("");
+            router.refresh();
         }
-
     }
     const handelSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0] as File
@@ -292,7 +326,9 @@ export const AIChatBox = ({ projectId }: props) => {
                     </DialogHeader>
 
                     <DialogFooter>
-                        <DialogClose render={<Button variant="outline">Cancel</Button>} />
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
                         <CheckoutButton
                             planId="cplan_3BOrkk4HfbSciWASdd3nV704721"
                             planPeriod="month"

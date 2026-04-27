@@ -47,8 +47,7 @@ export function ProjectView({ projectId, initialMessages }: Props) {
     return (
         <ResizablePanelGroup
             className="h-dvh w-dvw overflow-hidden"
-            direction="horizontal"
-            id="project-view-layout"
+            direction={"horizontal"}
         >
             <ResizablePanel defaultSize={20} minSize={20}>
                 <MessagesContainer
