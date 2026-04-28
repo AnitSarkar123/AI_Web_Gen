@@ -100,44 +100,42 @@ export const codeAgentFunction = inngest.createFunction(
       model: process.env.OPENAI_MODEL_NAME,
     });
     
-    // Fast naming using direct OpenAI API (not agent framework)
+    // Fast naming using standard OpenAI SDK
     const runNamingAgent = async (prompt: string) => {
       try {
         console.log("[codeAgentFunction] Starting name generation...");
         const startTime = Date.now();
         
         const client = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY || "",
+          apiKey: process.env.OPENAI_API_KEY,
           baseURL: process.env.OPENAI_API_ENDPOINT,
-          timeout: 30000, // 30 second timeout
         });
         
-        const response = await client.messages.create({
+        const response = await client.chat.completions.create({
           model: process.env.OPENAI_MODEL_NAME || "gpt-4o-mini",
-          max_tokens: 50,
-          system: "You are an assistant that generates a concise and descriptive project name. Output ONLY the project name (2-4 words, no quotes, no explanation).",
           messages: [
+            {
+              role: "system",
+              content: "You are an assistant that generates a concise and descriptive project name. Output ONLY the project name (2-4 words, no quotes, no explanation).",
+            },
             {
               role: "user",
               content: prompt,
             },
           ],
+          max_tokens: 50,
+          temperature: 0.5,
         });
         
         const elapsed = Date.now() - startTime;
         console.log(`[codeAgentFunction] Name generation completed in ${elapsed}ms`);
         
-        const content = response.content[0];
-        if (content.type === "text") {
-          const projectName = content.text
-            .replace(/[^a-zA-Z0-9\s\-]/g, "")
-            .trim()
-            .slice(0, 50) || "Untitled Project";
-          console.log(`[codeAgentFunction] Generated project name: "${projectName}"`);
-          return projectName;
-        }
-        
-        return "Untitled Project";
+        const projectName = (response.choices[0]?.message?.content || "")
+          .replace(/[^a-zA-Z0-9\s\-]/g, "")
+          .trim()
+          .slice(0, 50) || "Untitled Project";
+        console.log(`[codeAgentFunction] Generated project name: "${projectName}"`);
+        return projectName;
       } catch (error) {
         console.error("[codeAgentFunction] Name generation error:", error);
         throw error;

@@ -75,7 +75,7 @@ export const AIChatBox = ({ projectId }: props) => {
 
         if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
 
-        if (message === "Demo is ready") {
+        if (message.includes("Project Demo is ready")) {
             router.refresh();
 
             clearTimerRef.current = setTimeout(() => setStatus(null), 5000);

@@ -32,6 +32,7 @@ interface Props {
   fragmentId: string;
   projectId: string;
   sandboxId: string;
+  onSaved?: (files: FileCollection) => void;
 }
 
 export default function FileExplorer({
@@ -39,6 +40,7 @@ export default function FileExplorer({
   fragmentId,
   projectId,
   sandboxId,
+  onSaved,
 }: Props) {
   const [selectedFile, setSelectedFile] = useState<string | null>(() => {
     const fileKeys = Object.keys(files);
@@ -57,9 +59,17 @@ export default function FileExplorer({
     try {
       setIsLoading(true);
 
-      await apiClient
+      const response = await apiClient
         .fragments({ fragmentId })
         .patch({ files: localFiles, projectId, sandboxId });
+
+      const savedFiles =
+        (response as { data?: { files?: FileCollection } })?.data?.files ??
+        ({ ...files, ...localFiles } as FileCollection);
+
+      onSaved?.(savedFiles);
+      setLocalFiles({});
+      toast.success("Save successfully");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {

@@ -86,6 +86,16 @@ export function ProjectView({ projectId, initialMessages }: Props) {
                             fragmentId={activeCodeFragment?.id ?? ""}
                             projectId={projectId}
                             sandboxId={activeCodeFragment?.sandboxId ?? ""}
+                            onSaved={(savedFiles) => {
+                                setActiveCodeFragment((current) =>
+                                    current
+                                        ? {
+                                              ...current,
+                                              files: savedFiles,
+                                          }
+                                        : current,
+                                );
+                            }}
                         />
                     </TabsContent>
                 </Tabs>
