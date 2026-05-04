@@ -12,20 +12,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.externals.push("@prisma/client");
-    }
-    return config;
-  },
-  experimental: {
-    outputFileTracingIncludes: {
-      "/**": [
-        path.join(process.cwd(), "lib/generated/prisma/**/*"),
-        path.join(process.cwd(), "node_modules/.prisma/**/*"),
-        path.join(process.cwd(), "node_modules/@prisma/engines/**/*"),
-      ],
-    },
+  outputFileTracingIncludes: {
+    "/**": [
+      path.join(process.cwd(), "lib/generated/prisma/**/*"),
+      path.join(process.cwd(), "node_modules/.prisma/**/*"),
+      path.join(process.cwd(), "node_modules/@prisma/engines/**/*"),
+    ],
   },
 };
 
