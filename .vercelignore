@@ -1,16 +1,17 @@
-# Include Prisma files - they must be deployed
-!lib/generated/prisma/**
-!.prisma/**
-!node_modules/.prisma/**
-!node_modules/@prisma/engines/**
+# Include Prisma files - they MUST be deployed
+!.next/server/lib/generated/prisma/**
+!.next/server/node_modules/@prisma/**
+!.next/server/node_modules/.prisma/**
+!.next/server/@prisma/**
 
-# Standard ignore patterns
+# Standard ignores
 .git
 .gitignore
 README.md
 .env.local
 .env.*.local
-.next
+node_modules
 .turbo
 dist
 coverage
+
