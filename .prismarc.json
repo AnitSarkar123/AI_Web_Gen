@@ -1,0 +1,4 @@
+{
+  "seed": false,
+  "prismaSchema": "prisma/schema.prisma"
+}
