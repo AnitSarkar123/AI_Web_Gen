@@ -5,10 +5,5 @@
   "env": {
     "PRISMA_SKIP_ENGINE_CHECK": "true",
     "PRISMA_SKIP_VALIDATION_WARNING": "true"
-  },
-  "functions": {
-    "api/**": {
-      "maxDuration": 60
-    }
   }
 }
