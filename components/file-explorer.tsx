@@ -171,7 +171,9 @@ export default function FileExplorer({
           </DialogHeader>
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline">Cancel</Button>} />
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
             <CheckoutButton
               planId="cplan_3BOrkk4HfbSciWASdd3nV704721"
               planPeriod="month"

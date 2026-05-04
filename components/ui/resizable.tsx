@@ -4,11 +4,18 @@ import { GripVerticalIcon } from "lucide-react"
 import * as ResizablePrimitive from "react-resizable-panels"
 import { IconSquareToggle } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
+import { ReactNode } from "react"
+
+interface ResizablePanelGroupProps extends ResizablePrimitive.GroupProps {
+  className?: string
+  children?: ReactNode
+  direction?: "horizontal" | "vertical"
+}
 
 function ResizablePanelGroup({
   className,
   ...props
-}: ResizablePrimitive.GroupProps) {
+}: ResizablePanelGroupProps) {
   return (
     <ResizablePrimitive.Group
       data-slot="resizable-panel-group"
