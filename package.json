@@ -7,7 +7,6 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint"
-    
   },
   "dependencies": {
     "@ai-sdk/groq": "^3.0.26",
@@ -64,6 +63,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "netlify-plugin-inngest": "^1.0.1",
     "prisma": "^6.19.2",
     "shadcn": "^3.8.5",
     "tailwindcss": "^4",
