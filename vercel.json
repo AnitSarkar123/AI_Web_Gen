@@ -1,5 +1,8 @@
 {
-  "buildCommand": "prisma generate && next build",
-  "installCommand": "npm install",
-  "devCommand": "next dev"
+  "buildCommand": "npm ci && npm run build",
+  "installCommand": "npm ci",
+  "devCommand": "next dev",
+  "env": {
+    "PRISMA_SKIP_VALIDATION_WARNING": "true"
+  }
 }

@@ -1,0 +1,14 @@
+# Don't ignore Prisma files
+!lib/generated/prisma/**
+!.prisma/**
+!node_modules/.prisma/**
+
+# Standard ignores
+.git
+.gitignore
+README.md
+.env.local
+.env.*.local
+.next
+.turbo
+dist
