@@ -5,12 +5,5 @@
   "env": {
     "PRISMA_SKIP_ENGINE_CHECK": "true",
     "PRISMA_SKIP_VALIDATION_WARNING": "true"
-  },
-  "outputDirectory": ".next",
-  "includeFiles": [
-    "lib/generated/prisma/**",
-    "node_modules/.prisma/**",
-    "node_modules/@prisma/engines/**",
-    "prisma/schema.prisma"
-  ]
+  }
 }
