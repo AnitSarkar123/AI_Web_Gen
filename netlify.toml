@@ -1,2 +1,15 @@
+[build]
+command = "prisma generate && npm run build"
+functions = "netlify/functions"
+publish = ".next"
+
+[build.environment]
+PRISMA_SKIP_ENGINE_CHECK = "true"
+PRISMA_SKIP_VALIDATION_WARNING = "true"
+
 [[plugins]]
 package = "netlify-plugin-inngest"
+
+# Skip secrets scanning for these known values
+[build.processing.skip_netlify_processing_post_build]
+SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_API_URL,NEXT_PUBLIC_CLERK_SIGN_IN_URL,NEXT_PUBLIC_CLERK_SIGN_UP_URL"
