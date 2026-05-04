@@ -11,7 +11,11 @@ export async function getSandbox(sanboxId: string) {
 
 }
 
-export const toProjectPath = (p: string) => {
+export const toProjectPath = (p: string | undefined) => {
+    if (!p) {
+        throw new Error("Path cannot be empty or undefined");
+    }
+    
     const normalized = p.replace(/\\/g, '/').trim();
 
     // Strip any absolute prefix pointing to known sandbox roots

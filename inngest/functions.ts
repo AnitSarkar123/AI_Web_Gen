@@ -216,7 +216,7 @@ export const codeAgentFunction = inngest.createFunction(
           name: 'createOrUpdateFiles',
           description: 'create or update files in the sandbox',
           parameters: z.object({
-            files: z.array(z.object({ path: z.string(), content: z.string() }))
+            files: z.array(z.object({ path: z.string().min(1), content: z.string() }))
           }),
           handler: async ({ files }, { step, network }: Tool.Options<codeAgentState>) => {
             await publish(
@@ -224,27 +224,42 @@ export const codeAgentFunction = inngest.createFunction(
             )
             const newFiles = await step?.run("createOrUpdateFiles", async () => {
               try {
+                if (!files || files.length === 0) {
+                  return network.state.data.files || {};
+                }
+                
                 const updatedFiles = network.state.data.files || {};
                 const sandbox = await getSandbox(sandboxId);
+                
                 for (const file of files) {
-                  const fullPath = toProjectPath(file.path);
-                  await sandbox.files.write(fullPath, file.content);
-                  updatedFiles[file.path] = file.content;
-
+                  if (!file.path || !file.content) {
+                    console.warn(`[createOrUpdateFiles] Skipping invalid file:`, file);
+                    continue;
+                  }
+                  
+                  try {
+                    const fullPath = toProjectPath(file.path);
+                    await sandbox.files.write(fullPath, file.content);
+                    updatedFiles[file.path] = file.content;
+                  } catch (fileError) {
+                    console.error(`[createOrUpdateFiles] Error writing file ${file.path}:`, fileError);
+                    throw new Error(`Failed to write file ${file.path}: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
+                  }
                 }
                 return updatedFiles;
               } catch (e) {
-                return "Error creating/updating files: " + e;
-
+                const errorMsg = e instanceof Error ? e.message : String(e);
+                console.error(`[createOrUpdateFiles] Error:`, errorMsg);
+                throw new Error(`Error creating/updating files: ${errorMsg}`);
               }
             })
-            if (typeof newFiles == "object") {
+            
+            if (typeof newFiles === "object" && newFiles !== null) {
               network.state.data.files = newFiles;
               return `Successfully updated ${files.length} files.`;
             }
-
-
-
+            
+            throw new Error("Failed to update files: invalid response");
           }
         }),
         createTool({
