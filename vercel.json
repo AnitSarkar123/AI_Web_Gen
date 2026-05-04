@@ -4,7 +4,11 @@
   "devCommand": "next dev",
   "env": {
     "PRISMA_SKIP_ENGINE_CHECK": "true",
-    "PRISMA_SKIP_VALIDATION_WARNING": "true",
-    "PRISMA_QUERY_ENGINE_LIBRARY": "libquery_engine-rhel-openssl-3.0.x.so.node"
+    "PRISMA_SKIP_VALIDATION_WARNING": "true"
+  },
+  "functions": {
+    "api/**": {
+      "maxDuration": 60
+    }
   }
 }

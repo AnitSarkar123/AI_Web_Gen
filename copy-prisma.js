@@ -8,7 +8,6 @@ function copyFileSync(src, dest) {
     fs.mkdirSync(destDir, { recursive: true });
   }
   fs.copyFileSync(src, dest);
-  // Ensure file is executable
   fs.chmodSync(dest, 0o755);
 }
 
@@ -40,53 +39,34 @@ function copyDirSync(src, dest) {
 
 console.log('🔄 Preparing Prisma deployment files...');
 
-// Copy Prisma generated client
 const srcPrismaDir = path.join(__dirname, 'lib/generated/prisma');
+const srcEnginesDir = path.join(__dirname, 'node_modules/@prisma/engines');
+
+// Primary location: .next/server
 const destPrismaDir = path.join(__dirname, '.next/server/lib/generated/prisma');
+const destEnginesDir = path.join(__dirname, '.next/server/node_modules/@prisma/engines');
+
 if (copyDirSync(srcPrismaDir, destPrismaDir)) {
   console.log('✓ Copied Prisma client to .next/server/lib/generated/prisma');
 }
 
-// Copy Prisma engines to multiple locations for maximum compatibility
-const srcEnginesDir = path.join(__dirname, 'node_modules/@prisma/engines');
-
-// Location 1: node_modules/@prisma/engines
-const destEnginesDir1 = path.join(__dirname, '.next/server/node_modules/@prisma/engines');
-if (copyDirSync(srcEnginesDir, destEnginesDir1)) {
+if (copyDirSync(srcEnginesDir, destEnginesDir)) {
   console.log('✓ Copied Prisma engines to .next/server/node_modules/@prisma/engines');
-}
-
-// Location 2: Root server node_modules
-const destEnginesDir2 = path.join(__dirname, '.next/server/node_modules/@prisma/engines');
-if (fs.existsSync(srcEnginesDir)) {
-  console.log('✓ Engines also available at alternate locations');
-}
-
-// Copy .prisma/client
-const srcPrismaClientDir = path.join(__dirname, 'node_modules/.prisma/client');
-const destPrismaClientDir = path.join(__dirname, '.next/server/node_modules/.prisma/client');
-if (copyDirSync(srcPrismaClientDir, destPrismaClientDir)) {
-  console.log('✓ Copied .prisma/client to .next/server');
-}
-
-// Verify critical files exist
-const engineBinary = path.join(destEnginesDir1, 'libquery_engine-rhel-openssl-3.0.x.so.node');
-if (fs.existsSync(engineBinary)) {
-  const stats = fs.statSync(engineBinary);
-  console.log(`✓ Engine binary verified: ${engineBinary} (${stats.size} bytes)`);
   
-  // Ensure it's executable
-  fs.chmodSync(engineBinary, 0o755);
-  console.log('✓ Engine binary marked as executable');
-} else {
-  console.warn(`⚠ Engine binary not found at: ${engineBinary}`);
-  console.warn('Available files in engines directory:');
-  try {
-    const files = fs.readdirSync(destEnginesDir1);
-    files.forEach(f => console.warn(`  - ${f}`));
-  } catch (e) {
-    console.warn('  (directory does not exist)');
+  // Find and verify engine binary
+  const engineBinary = path.join(destEnginesDir, 'libquery_engine-rhel-openssl-3.0.x.so.node');
+  if (fs.existsSync(engineBinary)) {
+    const stats = fs.statSync(engineBinary);
+    console.log(`✓ Engine binary found: libquery_engine-rhel-openssl-3.0.x.so.node (${stats.size} bytes)`);
+    fs.chmodSync(engineBinary, 0o755);
+    console.log('✓ Engine binary marked as executable');
   }
+}
+
+// Also copy to .next root for serverless compatibility
+const destEnginesRoot = path.join(__dirname, '.next/@prisma/engines');
+if (copyDirSync(srcEnginesDir, destEnginesRoot)) {
+  console.log('✓ Copied engines to .next/@prisma/engines (serverless location)');
 }
 
 console.log('✓ Prisma deployment preparation complete\n');

@@ -17,8 +17,11 @@ const nextConfig: NextConfig = {
       path.join(process.cwd(), "lib/generated/prisma/**/*"),
       path.join(process.cwd(), "node_modules/.prisma/**/*"),
       path.join(process.cwd(), "node_modules/@prisma/engines/**/*"),
+      path.join(process.cwd(), "node_modules/@prisma/**/*"),
     ],
   },
+  // Ensure Prisma client is available to serverless functions
+  serverExternalPackages: ["@prisma/client"],
 };
 
 export default nextConfig;
